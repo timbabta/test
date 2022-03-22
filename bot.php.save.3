@@ -1,0 +1,1331 @@
+\\<?php
+//ini_set('error_reporting', E_ALL);
+//ini_set('display_errors', 1);
+//ini_set('display_startup_errors', 1);
+// определим кодировку UTF-8
+header("HTTP/1.1 200 OK");
+header('Content-type: text/html; charset=utf-8');
+// создаем объект магазина
+$newShop = new ShopBot();
+// запускаем магазин
+$newShop->init();
+
+/** Класс Магазина
+ * Class ShopBot
+ */
+class ShopBot
+{
+    // первичные данные
+    private $token = "5104085784:AAEiwPaUWQfQ9dPdWuz8Lqlfl1VCR5NbP64";
+    private $admin = "866537385"; // Ваш id в ТЕЛеГРАМ
+    private $helloText = "Привет, ";
+    private $img_path = "img"; // путь до директории с картинками относительно этого файла
+
+
+    // Яндекс.Кошелек для приема оплаты
+    private $receiver = "ВАШ_ЯНДЕКС_КОШЕЛЕК";
+    // адрес на который переадресует пользователя в случае успешного платежа
+    private $urlBot = "t.me/bon_username";
+    // название магазина
+    private $nameShop = "Выберите товар";
+
+
+    // для соединения с БД
+    private $host = 'localhost';
+    private $db = 'telebot';
+    private $user = 'crocususer';
+    private $pass = 'kingtw89';
+    private $charset = 'utf8mb4';
+    /**
+     * @var PDO
+     */
+    private $pdo;
+
+    //////////////////////////////////
+    // Запускаем магазин
+    //////////////////////////////////
+    /** Стартуем  бота
+     * @return bool
+     */
+    public function init()
+    {
+        // создаем соединение с базой данных
+        $this->setPdo();
+        // получаем данные от АПИ и преобразуем их в ассоциативный массив
+        $rawData = json_decode(file_get_contents('php://input'), true);
+        // направляем данные из бота в метод
+        // для определения дальнейшего выбора действий
+        $this->router($rawData);
+        // в любом случае вернем true для бот апи
+        return true;
+    }
+
+    /** Роутер - Определяем что делать с запросом от АПИ
+     * @param $data
+     * @return bool
+     */
+    private function router($data)
+    {
+        // берем технические данные id чата пользователя == его id и текст который пришел
+        $chat_id = $this->getChatId($data);
+        $text = $this->getText($data);
+
+        // если пришли данные message
+        if (array_key_exists("message", $data)) {
+            // дастаем действие админа из базы
+            $action = $this->getAdminAction();
+            $actionUser = $this->getUserAction($chat_id);
+
+            // текстовые данные
+            if (array_key_exists("text", $data['message'])) {
+
+                // если это пришел старт бота
+                if ($text == "/start") {
+                    $this->startBot($chat_id, $data);
+                } elseif ($text == "/admin" && $this->isAdmin($chat_id)) {
+                    // выводим страницу только админу
+                    $this->adminPage();
+                } elseif ($text == "/admincategory" && $this->isAdmin($chat_id)) {
+                    // Страница админ категорий
+                    $this->adminCategory();
+                } elseif ($text == "/addcategory" && $this->isAdmin($chat_id)) {
+                    // отправляем на добавление категории
+                    $this->addCategory();
+                } elseif ($text == "/admincontact" && $this->isAdmin($chat_id)) {
+                    // просмотр контактов
+                    $this->adminContact();
+                } elseif ($text == "/orders" && $this->isAdmin($chat_id)) {
+                    // просмотр заказов
+                    $this->showOrders();
+		} elseif ($text == "🛒 Корзина") {
+                    // просмотр заказов для пользователя
+                    $this->showBasket($data);
+                } elseif ($text == "/lc") {
+                    // просмотр заказов для пользователя
+                    $this->userLc($chat_id);
+	        } elseif (preg_match("~^go_~", $actionUser)){
+			$param = explode("_", $actionUser);
+                        // отправляем на добавление описания
+                        $this->showProduct2($data,$param['1']);
+		} elseif ($text == "Мне понятно, где находится кнопка «Меню кнопок»") {
+                    $this->showMenu($chat_id,$data,"Отлично! Приятного пользования!");
+		} elseif ($text == "📋 Меню") {
+ 		    $this->goMenu($chat_id,$data);
+		} elseif ($text == "📋 Вернуться в меню") {
+		   $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+
+                } else { // другие текстовые сообщения
+                    // смотрим куда отправить данные
+                    if ($action == "addcategory" && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления категории
+                        $this->adderCategory($text);
+                    } elseif (preg_match("~^addproduct_1_~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_1 - название
+                        $param = explode("_", $action);
+                        // отправляем на добавление описания
+                        $this->addProductName($param['2'], $text);
+                    } elseif (preg_match("~^addproduct_2_~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_2 - описание
+                        $param = explode("_", $action);
+                        // отправляем на добавление описания
+                        $this->addProductDescription($param['2'], $param['3'], $text);
+                    } elseif (preg_match("~^addproduct_3_~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_3 - единица измерения
+                        $param = explode("_", $action);
+                        // отправляем на добавление описания
+                        $this->addProductPrice($param['2'], $param['3'], $text);
+                    } elseif (preg_match("~^addproduct_4_~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_4 - цена
+                        $param = explode("_", $action);
+                        // отправляем на добавление описания
+                        $this->addProductUnit($param['2'], $param['3'], $text);
+                    } elseif (preg_match("~^addcontact_~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для для редактирования контактов
+                        $param = explode("_", $action);
+                        // отправляем данные на редактирование контактов
+                        $this->rederContact($param[1], $text);
+                    } elseif (preg_match("~^step_1_phone$~", $actionUser)) {
+                        // если ждем данные для добавления телефона
+                        $this->savePhoneUser($text, $data);
+                    } elseif (preg_match("~^step_2_adress$~", $actionUser)) {
+                        // если ждем данные для добавления адреса
+                        $this->saveAdressUser($text, $data);
+                    } else { // если не ждем никаких данных
+                      //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+                    }
+                }
+            } elseif (array_key_exists("photo", $data['message'])) {
+                // если пришли картинки то обрабатываем если ждем
+                if (preg_match("~^addproduct_5_~", $action) && $this->isAdmin($chat_id)) {
+                    // если ждем данные для добавления товара step_5 - картинка
+                    $param = explode("_", $action);
+                    // берем данные картинки
+                    $file_id = end($data['message']['photo'])['file_id'];
+                    // отправляем на добавление описания
+                    $this->addProductPhoto($param['2'], $param['3'], $file_id);
+                } else { // если не ждем картинок то предупереждение
+             //       $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+                }
+            } else { // другие данные - документы стикеры аудио ...
+              //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+            }
+        } // если пришел запрос на функцию обратного вызова
+        elseif (array_key_exists("callback_query", $data)) {
+            // смотрим какая функция вызывается
+            $func_param = explode("_", $text);
+            // определяем функцию в переменную
+            $func = $func_param[0];
+            // вызываем функцию передаем ей весь объект
+            $this->$func($data['callback_query']);
+        } // Здесь пришли пока не нужные нам форматы
+        else {
+            // вернем текст с ошибкой
+          //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+        }
+        return true;
+    }
+
+    //////////////////////////////////
+    // Рабочие методы
+    //////////////////////////////////
+    /** Обновляем контакты
+     * @param $id
+     * @param $text
+     */
+    private function rederContact($id, $text)
+    {
+        // запрос на обновление данных
+        $update = $this->pdo->prepare("UPDATE bot_shop_contact SET description = :description WHERE id = :id");
+        // если обновили то выводим контакты
+        if ($update->execute(['id' => $id, 'description' => $text])) {
+            // очищаем действия админа
+            $this->adminActionCancel();
+            // выводим страницу контактов
+            $this->adminContact();
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при обновлении контактов. \n/admin");
+        }
+    }
+
+    /** Форма для редактирования контактов
+     * @param $data
+     */
+    private function redContact($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        if ($this->setActionAdmin("addcontact_" . $param[1])) {
+            // готовим данные
+            $text = "<b>Текущая версия данных:</b>\n";
+            $text .= $this->prepareContact()[0] . "\n\n";
+            $text .= "Добавьте новое описание:";
+            // создаем массив с данными
+            $fields = [
+                'chat_id' => $this->admin,
+                'text' => $text,
+                'parse_mode' => 'html',
+                'message_id' => $data['message']['message_id'],
+            ];
+            // отправляем данные
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageText", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Укажите новые данные");
+            } else {
+                $this->notice($data['id'], "Ошибка отображения формы");
+            }
+        } else {
+            $this->notice($data['id'], "Ошибка обновления действия");
+        }
+    }
+
+    /**
+     *  выводим админу контакты с кнопкой для редактирования
+     */
+    private function adminContact()
+    {
+        //очищаем временную таблицу
+        $this->cleareTempProduct();
+        // очищаем действия админа
+        $this->adminActionCancel();
+        // получаем данные
+        $item = $this->prepareContact();
+        // добавляем кнопку назад
+        $buttons[] = [
+            $this->buildInlineKeyBoardButton("Редактировать", "redContact_" . $item[1]),
+        ];
+        // готовим данные
+        $fields = [
+            'chat_id' => $this->admin,
+            'text' => "<b>Контакы магазина</b>\n\n" . $item[0] . "\n\n/admin",
+            'parse_mode' => 'html',
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+        ];
+        // отправляем данные
+        $this->botApiQuery("sendMessage", $fields);
+    }
+
+    /** получаем значение контактов
+     * @return array
+     */
+    private function prepareContact()
+    {
+        // получаем значение контактов
+        $contact = $this->pdo->query("SELECT * FROM bot_shop_contact ORDER BY id DESC LIMIT 1");
+        // парсим в массив
+        $item = $contact->fetch();
+        // возвращаем результат
+        return [$item['description'], $item['id']];
+    }
+
+    /** просмотр товара
+     * @param $data
+     */
+    private function showProduct($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // данные товара
+            $item = $checkHref->fetch();
+            // название категории
+            $catName = $this->pdo->prepare("SELECT name FROM bot_shop_category WHERE id = :id");
+            $catName->execute(['id' => $item['parent']]);
+            // добавляем кнопку назад
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton("Назад", "showCategory_" . $item['parent']),
+            ];
+
+            $text = "Просмотр товара в категории: " . $catName->fetch()['name'] . "\n\n";
+
+            $text .= $this->prepareProduct($param[1]);
+
+            $fields = [
+                'chat_id' => $this->admin,
+                'text' => $text,
+                'parse_mode' => 'html',
+                'message_id' => $data['message']['message_id'],
+                'reply_markup' => $this->buildInlineKeyBoard($buttons),
+            ];
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageText", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Товар показан");
+            } else {
+                $this->notice($data['id'], "Ошибка отображения товара");
+            }
+        }
+    }
+
+
+	 private function showProduct2($data,$id)
+	    {
+
+     private function showProduct2($data,$id)
+    {
+
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $id]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+  //          $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+    //        $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // добавляем кнопку назад
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton("Test", "showCategory_0"),
+            ];
+
+
+            $text = $this->prepareProduct2($id);
+
+            $fields = [
+                'chat_id' => $this->admin,
+                'text' => $text,
+                'parse_mode' => 'html',
+                'message_id' => $data['message']['message_id'],
+                'reply_markup' => $this->buildInlineKeyBoard($buttons),
+            ];
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageText", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Товар показан");
+            } else {
+                $this->notice($data['id'], "Ошибка отображения товара");
+            }
+        }
+    }
+
+
+    /** удаляем категорию
+     * @param $data
+     */
+    private function deleteProduct($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // готовим запрос
+            $deleteSql = $this->pdo->prepare("DELETE FROM bot_shop_product WHERE id = :id");
+            // удаляем категорию
+            if ($deleteSql->execute(['id' => $param[1]])) {
+                // данные товара
+                $item = $checkHref->fetch();
+                // название категории
+                $catName = $this->pdo->prepare("SELECT name FROM bot_shop_category WHERE id = :id");
+                $catName->execute(['id' => $item['parent']]);
+                // получаем массив данных для обновления
+                $fields = $this->prepareCategory($catName->fetch()['name'], $item['parent']);
+                // добавляем к массиву id сообщения
+                $fields['message_id'] = $data['message']['message_id'];
+                // отправляем на изменение сообщения
+                $upMessage = $this->botApiQuery("editMessageText", $fields);
+                // если обновление прошло успешно
+                if ($upMessage['ok']) {
+                    $this->notice($data['id'], "Товар удален");
+                } else {
+                    $this->notice($data['id'], "Ошибка отображения изменений");
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка удаления товара.");
+            }
+        }
+    }
+
+    /** Изменение видимости товара
+     * @param $data
+     */
+    private function hideProduct($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // определяем видимость если был 1 ставим 0 и наоборот
+            $hide = $param[2] ? 0 : 1;
+            // готовим запрос
+            $updateSql = $this->pdo->prepare("UPDATE bot_shop_product SET hide = :hide WHERE id = :id");
+            // обновляем видимость
+            if ($updateSql->execute(['hide' => $hide, 'id' => $param[1]])) {
+                // данные товара
+                $item = $checkHref->fetch();
+                // название категории
+                $catName = $this->pdo->prepare("SELECT name FROM bot_shop_category WHERE id = :id");
+                $catName->execute(['id' => $item['parent']]);
+                // получаем массив данных для обновления
+                $fields = $this->prepareCategory($catName->fetch()['name'], $item['parent']);
+                // добавляем к массиву id сообщения
+                $fields['message_id'] = $data['message']['message_id'];
+                // отправляем на изменение сообщения
+                $upMessage = $this->botApiQuery("editMessageText", $fields);
+                // если обновление прошло успешно
+                if ($upMessage['ok']) {
+                    $this->notice($data['id'], "Видимость изменена");
+                } else {
+                    $this->notice($data['id'], "Ошибка отображения изменений");
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка изменения видимости товара");
+            }
+        }
+    }
+
+    /** Добавляем картинку и заканчиваем с добавлением товара
+     * @param $category
+     * @param $product
+     * @param $file_id
+     */
+    private function addProductPhoto($category, $product, $file_id)
+    {
+        // запрос на проверку есть ли такая временная запись товара в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product_temp WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $product]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() !== 0) {
+            // получаем картинку
+            $photo = $this->getPhoto($file_id);
+            if ($photo) {
+                // Добавляем в основную таблицу новый товар
+                $insert = $this->pdo->prepare("INSERT INTO bot_shop_product SET parent = :parent, name = :name, description = :description, price = :price, unit = :unit, image_tlg = :image_tlg, image = :image, hide = 1");
+                // достаем временные данные
+                $item = $checkHref->fetch();
+                // готовим данные
+                $array = [
+                    'parent' => $category,
+                    'name' => $item['name'],
+                    'description' => $item['description'],
+                    'price' => $item['price'],
+                    'unit' => $item['unit'],
+                    'image_tlg' => $file_id,
+                    'image' => $photo
+                ];
+                // если удалось добавить товар
+                if ($insert->execute($array)) {
+                    //очищаем временную таблицу
+                    $this->cleareTempProduct();
+                    // очищаем действия админа
+                    $this->adminActionCancel();
+                    // название категории
+                    $catName = $this->pdo->prepare("SELECT name FROM bot_shop_category WHERE id = :id");
+                    $catName->execute(['id' => $category]);
+                    // выводим список товаров
+                    $fields = $this->prepareCategory($catName->fetch()['name'], $category);
+                    // обновляем сообщение - выводим список товаров
+                    $this->botApiQuery("sendMessage", $fields);
+                } else {
+                    $this->sendMessage($this->admin, "Ошибка при добавлении товара 0");
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка при добавлении товара 1");
+            }
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении товара 2");
+        }
+    }
+
+    /** общая функция загрузки картинки
+     * @param $file_id
+     * @return bool|string
+     */
+    private function getPhoto($file_id)
+    {
+        // получаем file_path
+        $file_path = $this->getPhotoPath($file_id);
+        // возвращаем результат загрузки фото
+        return $this->copyPhoto($file_path);
+    }
+
+    /** функция получения метонахождения файла
+     * @param $file_id
+     * @return mixed
+     */
+    private function getPhotoPath($file_id)
+    {
+        // получаем объект File
+        $array = $this->botApiQuery("getFile", ['file_id' => $file_id]);
+        // возвращаем file_path
+        return $array['result']['file_path'];
+    }
+
+    /** копируем фото к себе
+     * @param $file_path
+     * @return bool|string
+     */
+    private function copyPhoto($file_path)
+    {
+        // ссылка на файл в телеграме
+        $file_from_tgrm = "https://api.telegram.org/file/bot" . $this->token . "/" . $file_path;
+        // достаем расширение файла
+        $ext = end(explode(".", $file_path));
+        // назначаем свое имя здесь время_в_секундах.расширение_файла
+        $name_our_new_file = $this->img_path . "/" . time() . "." . $ext;
+        // возвращаем путь картинки или false
+        return copy($file_from_tgrm, $name_our_new_file) ? $name_our_new_file : false;
+    }
+
+    /** Добавляем еденицу измерения
+     * @param $category
+     * @param $product
+     * @param $text
+     */
+    private function addProductUnit($category, $product, $text)
+    {
+        // запрос на проверку есть ли такая временная запись товара в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product_temp WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $product]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() !== 0) {
+            // готовим запрос
+            $update = $this->pdo->prepare("UPDATE bot_shop_product_temp SET unit = :unit WHERE id = :id");
+            // если добавление успешно то просим добавить описание
+            if ($update->execute(['id' => $product, 'unit' => $text])) {
+                // Добавляем дейсвтие админа для описания
+                if ($this->setActionAdmin("addproduct_5_" . $category . "_" . $product)) {
+                    // название категории
+                    $cat = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+                    // выполняем запрос
+                    $cat->execute(['id' => $category]);
+                    // готовим текст
+                    $text = "Процесс добавления товара в категорию: " . $cat->fetch()['name'] . "\n\n";
+                    // получаем все о товаре
+                    $text .= $this->prepareProduct($product, "_temp");
+                    // добавляем инструкцию
+                    $text .= "\nДобавьте картинку для товара:";
+                    // добавляем кнопку отменить
+                    $buttons[] = [
+                        $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $category . "_" . $product),
+                    ];
+                    $fields = [
+                        'chat_id' => $this->admin,
+                        'text' => $text,
+                        'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                        'parse_mode' => 'html',
+                    ];
+                    // отправляем на изменение сообщения
+                    $this->botApiQuery("sendMessage", $fields);
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка при добавлении товара 1");
+            }
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении товара 2");
+        }
+    }
+
+    /** Добавляем цену
+     * @param $category
+     * @param $product
+     * @param $text
+     */
+    private function addProductPrice($category, $product, $text)
+    {
+        // запрос на проверку есть ли такая временная запись товара в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product_temp WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $product]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() !== 0) {
+            // проверить данные на число и привестви их к модулю
+            if (!is_numeric($text)) {
+                $this->sendMessage($this->admin, "Цена должна быть числом. Попробуйте еще раз.");
+            } else {
+                // приводим к модулю числу
+                $text = abs($text);
+                // готовим запрос
+                $update = $this->pdo->prepare("UPDATE bot_shop_product_temp SET price = :price WHERE id = :id");
+                // если добавление успешно то просим добавить описание
+                if ($update->execute(['id' => $product, 'price' => $text])) {
+                    // Добавляем дейсвтие админа для описания
+                    if ($this->setActionAdmin("addproduct_4_" . $category . "_" . $product)) {
+                        // название категории
+                        $cat = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+                        // выполняем запрос
+                        $cat->execute(['id' => $category]);
+                        // готовим текст
+                        $text = "Процесс добавления товара в категорию: " . $cat->fetch()['name'] . "\n\n";
+                        // получаем все о товаре
+                        $text .= $this->prepareProduct($product, "_temp");
+                        // добавляем инструкцию
+                        $text .= "\nДобавьте еденицу измерения:";
+                        // добавляем кнопку отменить
+                        $buttons[] = [
+                            $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $category . "_" . $product),
+                        ];
+                        $fields = [
+                            'chat_id' => $this->admin,
+                            'text' => $text,
+                            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                            'parse_mode' => 'html',
+                        ];
+                        // отправляем на изменение сообщения
+                        $this->botApiQuery("sendMessage", $fields);
+                    }
+                } else {
+                    $this->sendMessage($this->admin, "Ошибка при добавлении товара 1");
+                }
+            }
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении товара 2");
+        }
+    }
+
+    /** Добавление описания
+     * @param $category
+     * @param $product
+     * @param $text
+     */
+    private function addProductDescription($category, $product, $text)
+    {
+        // запрос на проверку есть ли такая временная запись товара в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product_temp WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $product]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() !== 0) {
+            $update = $this->pdo->prepare("UPDATE bot_shop_product_temp SET description = :description WHERE id = :id");
+            // если добавление успешно то просим добавить описание
+            if ($update->execute(['id' => $product, 'description' => $text])) {
+                // Добавляем дейсвтие админа для описания
+                if ($this->setActionAdmin("addproduct_3_" . $category . "_" . $product)) {
+                    // название категории
+                    $cat = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+                    // выполняем запрос
+                    $cat->execute(['id' => $category]);
+                    // готовим текст
+                    $text = "Процесс добавления товара в категорию: " . $cat->fetch()['name'] . "\n\n";
+                    // получаем все о товаре
+                    $text .= $this->prepareProduct($product, "_temp");
+                    // добавляем инструкцию
+                    $text .= "\nДобавьте цену товара в формате 0.00 (целое и положительное):";
+                    // добавляем кнопку отменить
+                    $buttons[] = [
+                        $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $category . "_" . $product),
+                    ];
+                    $fields = [
+                        'chat_id' => $this->admin,
+                        'text' => $text,
+                        'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                        'parse_mode' => 'html',
+                    ];
+                    // отправляем на изменение сообщения
+                    $this->botApiQuery("sendMessage", $fields);
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка при добавлении товара 1");
+            }
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении товара 2");
+        }
+    }
+
+    /** Добавляем товар во временную таблицу и добавляем название
+     * @param $id
+     * @param $text
+     */
+    private function addProductName($id, $text)
+    {
+        // Добавляем название во временную таблицу
+        $insert = $this->pdo->prepare("INSERT INTO bot_shop_product_temp SET parent = :id, name = :name");
+        // если добавление успешно то просим добавить описание
+        if ($insert->execute(['id' => $id, 'name' => $text])) {
+            // получаем добавленный id
+            $idProduct = $this->pdo->lastInsertId();
+            // Добавляем дейсвтие админа для описания
+            if ($this->setActionAdmin("addproduct_2_" . $id . "_" . $idProduct)) {
+                // название категории
+                $category = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+                // выполняем запрос
+                $category->execute(['id' => $id]);
+                // готовим текст
+                $text = "Процесс добавления товара в категорию: " . $category->fetch()['name'] . "\n\n";
+                // получаем все о товаре
+                $text .= $this->prepareProduct($idProduct, "_temp");
+                // добавляем инструкцию
+                $text .= "\nДобавьте описание товара:";
+                // добавляем кнопку отменить
+                $buttons[] = [
+                    $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $id . "_" . $idProduct),
+                ];
+                $fields = [
+                    'chat_id' => $this->admin,
+                    'text' => $text,
+                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                    'parse_mode' => 'html',
+                ];
+                // отправляем на изменение сообщения
+                $this->botApiQuery("sendMessage", $fields);
+            }
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении товара");
+        }
+    }
+
+    /** готовим информацию о товаре
+     * @param $id
+     * @param string $type
+     * @return bool|string
+     */
+    private function prepareProduct($id, $type = "")
+    {
+        $product = $this->pdo->prepare("SELECT * FROM bot_shop_product" . $type . " WHERE id = :id");
+        $product->execute(['id' => $id]);
+        if ($product->rowCount() === 0) {
+            return false;
+        } else {
+            $item = $product->fetch();
+            // создаем переменную для складирования текста
+            $text = "";
+            // данные картикни
+            if (empty($item['image'])) {
+                $image = "Не загружена";
+            } else {
+                // получаем путь относительно домена
+                $path = $_SERVER['PHP_SELF'];
+                // получаем вхождение последнего слеша
+                $path_len = mb_strripos($_SERVER['PHP_SELF'], "/");
+                // отрезаем имя файла - получаем путь до текущей директории
+                $path_new = mb_strcut($path, 0, $path_len + 1);
+                $image = "";
+                $text .= "<a href='https://" . $_SERVER['SERVER_NAME'] . $path_new . $item['image'] . "'>&#8203;&#8203;</a>";
+            }
+            $text .= "<b>Название: </b>" . $item['name'] . "\n";
+            $text .= "<b>Описание: </b>" . $item['description'] . "\n";
+            $text .= "<b>Цена: </b>" . $item['price'] . "\n";
+            $text .= "<b>Ед.изм: </b>" . $item['unit'] . "\n";
+            $text .= "<b>Картинка: </b>" . $image . "\n";
+            // возвращаем данные
+            return $text;
+        }
+    }
+ 
+  private function prepareProduct2($id, $type = "")
+    {
+        $product = $this->pdo->prepare("SELECT * FROM bot_shop_product" . $type . " WHERE id = :id");
+        $product->execute(['id' => $id]);
+        if ($product->rowCount() === 0) {
+            return false;
+        } else {
+	    while($item = $product->fetch()) {
+            // создаем переменную для складирования текста
+            $text = "";
+            // данные картикни
+            if (empty($item['image'])) {
+                $image = "Не загружена";
+            } else {
+                // получаем путь относительно домена
+                $path = $_SERVER['PHP_SELF'];
+                // получаем вхождение последнего слеша
+                $path_len = mb_strripos($_SERVER['PHP_SELF'], "/");
+                // отрезаем имя файла - получаем путь до текущей директории
+                $path_new = mb_strcut($path, 0, $path_len + 1);
+                $image = "";
+                $text .= "<a href='https://" . $_SERVER['SERVER_NAME'] . $path_new . $item['image'] . "'>&#8203;&#8203;</a>";
+            }
+            $text .= "<b>Название: </b>" . $item['name'] . "\n";
+            $text .= "<b>Описание: </b>" . $item['description'] . "\n";
+            $text .= "<b>Цена: </b>" . $item['price'] . "\n";
+            $text .= "<b>Ед.изм: </b>" . $item['unit'] . "\n";
+            $text .= "<b>Картинка: </b>" . $image . "\n";
+            // возвращаем данные
+            return $text;
+        }
+       }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /** Отменяем добавление товара
+     * @param $data
+     * @return bool
+     */
+    private function addProductCancel($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // проверяем есть ли такая запись в базе если это не 0
+        if ($param[2] != 0) {
+            // запрос на проверку есть ли такая временная запись товара в базе
+            $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product_temp WHERE id = :id");
+            // выполняем запрос
+            $checkHref->execute(['id' => $param[2]]);
+            // если вернулось ноль строк
+            if ($checkHref->rowCount() === 0) {
+                // выводим уведомление
+                $this->notice($data['id'], "Ссылка устарела");
+                // удаляем сообщение с кнопками из чата
+                $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+                // остановим выполнение скрипта
+                return true;
+            }
+        }
+        // очищаем действие админа
+        if ($this->adminActionCancel()) {
+            // удаляем из временной таблицы все
+            if (!$this->cleareTempProduct()) {
+                $this->notice($data['id'], "Ошибка удаления товара");
+            } else {
+                // возвращаемся к просмотру категории
+                // запрос на проверку есть ли такая категория в базе
+                $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+                // выполняем запрос
+                $checkHref->execute(['id' => $param[1]]);
+                // если вернулось ноль строк
+                if ($checkHref->rowCount() === 0) {
+                    // выводим ошибку
+                    $this->notice($data['id'], "Ссылка устарела");
+                    // удаляем сообщение с кнопками из чата
+                    $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+                } else {
+                    // выводим список товаров
+                    $fields = $this->prepareCategory($checkHref->fetch()['name'], $param[1]);
+                    // добавляем к массиву id сообщения
+                    $fields['message_id'] = $data['message']['message_id'];
+                    // обновляем сообщение - выводим список товаров
+                    $upMessage = $this->botApiQuery("editMessageText", $fields);
+                    // если обновление сообщения прошло успешно
+                    if ($upMessage['ok']) {
+                        $this->notice($data['id'], "Просмотр категории");
+                    } else {
+                        $this->notice($data['id'], "Ошибка отображения категории");
+                    }
+                }
+            }
+        } else {
+            $this->notice($data['id'], "Ошибка при очистке действий админа");
+        }
+    }
+
+    /** Очищаем временную таблицу товаров
+     * @return mixed
+     */
+    private function cleareTempProduct()
+    {
+        return $this->pdo->query("DELETE FROM bot_shop_product_temp");
+    }
+
+    /** выводим категории по кнопке назад
+     * @param $data
+     * @return bool
+     */
+    private function addProduct($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // очищаем врем.табл
+        if (!$this->cleareTempProduct()) {
+            // выводим ошибку и останавливаем скрипт
+            $this->notice($data['id'], "Ошибка очистки временной таблицы");
+            return true;
+        }
+        // если удалось поставить действие админа
+        if ($this->setActionAdmin("addproduct_1_" . $param[1])) {
+            // название категории
+            $category = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+            // выполняем запрос
+            $category->execute(['id' => $param[1]]);
+            // готовим текст
+            $text = "Процесс добавления товара в категорию: " . $category->fetch()['name'] . "\n\n";
+            // кнопка для отмены добавления
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $param[1] . "_0"),
+            ];
+            // готовим данные для отправки
+            $fields = [
+                'chat_id' => $this->admin,
+                'message_id' => $data['message']['message_id'],
+                'text' => $text . 'Добавьте название товара:',
+                'reply_markup' => $this->buildInlineKeyBoard($buttons),
+            ];
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageText", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Добавьте название");
+            } else {
+                $this->notice($data['id'], "Ошибка отображения формы 1");
+            }
+        } else {
+            $this->notice($data['id'], "Ошибка при установке действий админу");
+        }
+    }
+
+    /** Смотрим категорию
+     * @param $data
+     */
+    private function showCategory($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // выводим список товаров
+            $fields = $this->prepareCategory($checkHref->fetch()['name'], $param[1]);
+            // добавляем к массиву id сообщения
+            $fields['message_id'] = $data['message']['message_id'];
+            // обновляем сообщение - выводим список товаров
+            $upMessage = $this->botApiQuery("editMessageText", $fields);
+            // если обновление сообщения прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Просмотр категории");
+            } else {
+                $this->notice($data['id'], "Ошибка отображения категории");
+            }
+        }
+    }
+
+    /** Готовим данные категории
+     * @param $name
+     * @param $id
+     * @return array
+     */
+    private function prepareCategory($name, $id)
+    {
+        // массив кнопок
+        $buttons = [];
+        // добавляем кнопки назад и добавить
+        $buttons[] = [
+            $this->buildInlineKeyBoardButton("Назад", "adminCats_0"),
+            $this->buildInlineKeyBoardButton("Добавить", "addProduct_" . $id),
+        ];
+        // получаем товары из базы
+        $products = $this->pdo->prepare('SELECT * FROM bot_shop_product WHERE parent = :id');
+        $products->execute(['id' => $id]);
+        // проходим циклом по полученным данным из базы
+        while ($row = $products->fetch()) {
+            // здесь в качестве иконок эмодзи - возможно их не будет видно в редакторе, но они здесь есть
+            // выводим иконку для понимания видимости
+            $hideIcon = $row['hide'] ? '🙈' : '🐵';
+            // формируем кнопки одна для изменения видимости другая для удаления
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton($row['name'], "showProduct_" . $row['id']),
+                $this->buildInlineKeyBoardButton($hideIcon, "hideProduct_" . $row['id'] . "_" . $row['hide']),
+                $this->buildInlineKeyBoardButton("✖", "deleteProduct_" . $row['id']),
+            ];
+        }
+        // первичный набор данных для отправки
+        $fields = [
+            'chat_id' => $this->admin,
+            'parse_mode' => 'html'
+        ];
+        // определяем текст
+        $text = "Товары категории \"" . $name . "\":";
+        // смотрим сколько товаров
+        if ($products->rowCount() === 0) {
+            // если нет категорий то выводим информ
+            $text .= "\nЕще нет товаров в базе для этой категории.";
+        }
+        // выводим кнопки
+        $fields['reply_markup'] = $this->buildInlineKeyBoard($buttons);
+        // добавляем в данные текст
+        $fields['text'] = $text;
+        // возвращаем массив
+        return $fields;
+    }
+
+    /** удаляем категорию
+     * @param $data
+     */
+    private function deleteCategory($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // готовим запрос
+            $deleteSql = $this->pdo->prepare("DELETE FROM bot_shop_category WHERE id = :id");
+            // удаляем категорию
+            if ($deleteSql->execute(['id' => $param[1]])) {
+                //удаление всех товаров и картинок в категории
+                $products = $this->pdo->prepare("SELECT id, image FROM bot_shop_product WHERE parent = :parent");
+                if ($products->execute(['parent' => $param[1]])) {
+                    while ($item = $products->fetch()) {
+                        @unlink($item['image']);
+                        $this->pdo->query("DELETE FROM bot_shop_product WHERE id = " . $item['id']);
+                    }
+                }
+                // получаем массив данных для обновления
+                $fields = $this->prepareAdminCategory();
+                // добавляем к массиву id сообщения
+                $fields['message_id'] = $data['message']['message_id'];
+                // отправляем на изменение сообщения
+                $upMessage = $this->botApiQuery("editMessageText", $fields);
+                // если обновление прошло успешно
+                if ($upMessage['ok']) {
+                    $this->notice($data['id'], "Категория удалена");
+                } else {
+                    $this->notice($data['id'], "Ошибка отображения изменений");
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка удаления категории.");
+            }
+        }
+    }
+
+    /** Изменение видимости категории
+     * @param $data
+     */
+    private function hideCategory($data)
+    {
+        // берем необходимую строку с данными
+        $obj = $data['data'];
+        // разбиваем в массив
+        $param = explode("_", $obj);
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_category WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $param[1]]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+            $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+            $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // определяем видимость если был 1 ставим 0 и наоборот
+            $hide = $param[2] ? 0 : 1;
+            // готовим запрос
+            $updateSql = $this->pdo->prepare("UPDATE bot_shop_category SET hide = :hide WHERE id = :id");
+            // обновляем видимость
+            if ($updateSql->execute(['hide' => $hide, 'id' => $param[1]])) {
+                // получаем массив данных для обновления
+                $fields = $this->prepareAdminCategory();
+                // добавляем к массиву id сообщения
+                $fields['message_id'] = $data['message']['message_id'];
+                // отправляем на изменение сообщения
+                $upMessage = $this->botApiQuery("editMessageText", $fields);
+                // если обновление прошло успешно
+                if ($upMessage['ok']) {
+                    $this->notice($data['id'], "Видимость изменена");
+                } else {
+                    $this->notice($data['id'], "Ошибка отображения изменений");
+                }
+            } else {
+                $this->sendMessage($this->admin, "Ошибка изменения видимости категории");
+            }
+        }
+    }
+
+    /** Добавляем категорию
+     * @param $name
+     */
+    private function adderCategory($name)
+    {
+        // делаем запрос на добавление категории, по умолчанию делаем ее не видимой
+        $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_category SET name = :name, hide = 1");
+        // возвращаем результат
+        if ($insertSql->execute(['name' => $name])) {
+            // если добавили то удаляем действия админа
+            if (!$this->adminActionCancel()) {
+                $this->sendMessage($this->admin, "Категорию добавили, но не смогли удалить действия админа во временной таблице");
+            }
+            // выводим категории в любом случае
+            $this->adminCategory();
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении категории");
+        }
+    }
+
+    /**
+     *  Форма для добавления категории
+     */
+    private function addCategory()
+    {
+        // если удалось поставить действие админа
+        if ($this->setActionAdmin("addcategory")) {
+            // выводим инструкцию
+            $this->sendMessage($this->admin, "Для добавления категории, отправьте наименование:");
+        }
+    }
+
+    /** Отменяем все действия админа
+     * @return mixed
+     */
+    private function adminActionCancel()
+    {
+        // возвращаем результат запроса
+        return $this->pdo->query("DELETE FROM bot_shop_action_admin");
+    }
+
+    /** Получаем действие админа из таблицы
+     * @return bool
+     */
+    private function getAdminAction()
+    {
+        // достаем из базы
+        $last = $this->pdo->query("SELECT name FROM bot_shop_action_admin ORDER BY id DESC LIMIT 1");
+        // преобразуем строку в массив
+        $lastAction = $last->fetch();
+        // если есть значение то возвращаем его иначе false
+        return isset($lastAction['name']) ? $lastAction['name'] : false;
+    }
+
+    /** Записываем действие админа
+     * @param $action
+     * @return mixed
+     */
+    private function setActionAdmin($action)
+    {
+        // отменяем все действия админа
+        if ($this->adminActionCancel()) {
+            // готовим запрос
+            $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_action_admin SET name = :name");
+            // возвращаем результат
+            return $insertSql->execute(['name' => $action]);
+        } else {
+            // выводим ошибку
+            $this->sendMessage($this->admin, "Ошибка отмены предыдущих действий.");
+        }
+    }
+
+    /** Страница админа
+     *
+     */
+    private function adminPage()
+    {
+        // готовим
+        $text = "Администрирование\n   /admincategory - Категории\n   /orders - заказы";
+        // выводим
+        $this->sendMessage($this->admin, $text);
+    }
+
+    /**
+     * выводим категории
+     */
+    private function adminCategory()
+    {
+        //очищаем временную таблицу
+        $this->cleareTempProduct();
+        // очищаем действия админа
+        $this->adminActionCancel();
+        // получаем данные
+        $fields = $this->prepareAdminCategory();
+        // отправляем данные админу
+        $this->botApiQuery("sendMessage", $fields);
+    }
+
+    /** выводим категории по кнопке назад
+     * @param $data
+     */
+    private function adminCats($data)
+    {
+        $fields = $this->prepareAdminCategory();
+        // добавляем к массиву id сообщения
+        $fields['message_id'] = $data['message']['message_id'];
+        // отправляем на изменение сообщения
+        $upMessage = $this->botApiQuery("editMessageText", $fields);
+        // если обновление прошло успешно
+        if ($upMessage['ok']) {
+            $this->notice($data['id'], "Список категорий");
+        } else {
+            $this->notice($data['id'], "Ошибка отображения категорий");
+        }
+    }
+
+    /** готовим категории
+     * @return array
+     */
+    private function prepareAdminCategory()
+    {
+        // создаем массив для кнопок
+        $buttons = [];
+        // получаем категории из базы
+        $category = $this->pdo->query('SELECT * FROM bot_shop_category');
+        // проходим циклом по полученным данным из базы
+        while ($row = $category->fetch()) {
+            // здесь в качестве иконок эмодзи - возможно их не будет видно в редакторе, но они здесь есть
+            // выводим иконку для понимания видимости
+            $hideIcon = $row['hide'] ? '🙈' : '🐵';
+            // формируем кнопки однадля изменения видимости другая для удаления
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton($row['name'], "showCategory_" . $row['id']),
+                $this->buildInlineKeyBoardButton($hideIcon, "hideCategory_" . $row['id'] . "_" . $row['hide']),
+                $this->buildInlineKeyBoardButton("✖", "deleteCategory_" . $row['id']),
+            ];
+        }
+        // первичный набор данных для отправки
+        $fields = [
+            'chat_id' => $this->admin,
+            'parse_mode' => 'html'
+        ];
+        // определяем текст
+        $text = "/addcategory - добавить категорию\n/admin - вернуться\n\nКатегории:";
+        // смотрим сколько категорий
+        if (count($buttons) == 0) {
+            // если нет категорий то выводим информ
+            $text .= "\nЕще нет категорий в базе.";
+        } else {
+            // если есть категории то выводим кнопки
+            $fields['reply_markup'] = $this->buildInlineKeyBoard($buttons);
+        }
+        // добавляем в данные текст
+        $fields['text'] = $text;
+        // возвращаем результат
+        return $fields;
+    }
+
+    /********************************************/
+
+    // Статья 3 - Интерфейс пользователя, оформление заказа, управление корзиной
+
+    /********************************************/
+
+    /** Выводим приветственное слово
+     * @param $chat_id
+     */
+    private function startBot($chat_id, $data)
+    {
+        // достаем пользователя из базы
+        $user = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
+        $user->execute(['user_id' => $chat_id]);
+
+        // если такого пользователя нет в базе то пишем его туда
+        if ($user->rowCount() == 0) {
+            // добавляем пользователя
+            $newUser = $this->pdo->prepare("INSERT INTO bot_shop_profile SET user_id = :user_id, first_name = :first_name, last_name = :last_name, phone = :phone, adress = :adress, action = 'start'");
+            $newUser->execute([
+                'user_id' => $chat_id,
+                'first_name' => $data['message']['chat']['first_name'],
