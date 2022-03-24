@@ -1,3 +1,4 @@
+
 <?php
 //ini_set('error_reporting', E_ALL);
 //ini_set('display_errors', 1);
@@ -698,7 +699,7 @@ class ShopBot
                     // получаем все о товаре
                     $text .= $this->prepareProduct($product, "_temp");
                     // добавляем инструкцию
-                    $text .= "\nДобавьте цену товара в формате 0.00 (целое и положительное):";
+                    $text .= "\nДобавьте цену товара в формате 0 (целое и положительное):";
                     // добавляем кнопку отменить
                     $buttons[] = [
                         $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $category . "_" . $product),
@@ -1635,8 +1636,19 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
    {
         $param = explode("_", $data['data']);
         $chat_id = $this->getChatId($data);
+
+	$check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
+        $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
+        $basket = $check->fetch();
+
+        if ($check->rowCount() === 0) {
+                $count=1;
+                } else {
+        $count = $basket['product_count'];
+                }
+
         // проверяем есть ли уже в корзине этот товар
-       $buttons = $this->drawBasketButton2($chat_id, $param[1]);
+       $buttons = $this->drawBasketButton2($param[1],$count,$param[3]);
 /*
 	        $fields = [
             'chat_id' => $chat_id,
@@ -1645,19 +1657,23 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         ];
         // отправляем на изменение сообщения
 */
-
-
+	if ($param[2] === 0){
+	$text = $param[3];
+	}else{
+	$text = $param[3]."Выберите количество товара";
+	}	
    $fields = [
                 'chat_id' => $chat_id,
                 'message_id' => $this->getMessageId($data),
-                'caption' => 'Выберите количество товара:',
+		'caption' => $text,
+	        'parse_mode' => 'html',
                 'reply_markup' => $this->buildInlineKeyBoard($buttons),
             ];
             // отправляем на изменение сообщения
             $upMessage = $this->botApiQuery("editMessageCaption", $fields);
             // если обновление прошло успешно
             if ($upMessage['ok']) {
-                $this->notice($data['id'], "Укажите количество");
+                $this->notice($data['id'], "");
             } else {
                 $this->notice($data['id'], "Ошибка");
             }
@@ -1692,7 +1708,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         // условие проверки
         if ($check->rowCount() > 0) {
             // пишем количесвто в переменную
-            $count = $check->fetch()['product_count'] + 1;
+            $count = $param[2];
             $updateSql = $this->pdo->prepare("UPDATE bot_shop_basket SET product_count = :product_count  WHERE product_id = :product_id AND user_id = :user_id");
             // обновляем видимость
             if (!$updateSql->execute([
@@ -1705,7 +1721,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
             }
         } else {
             // если товара в корзине нет то добавляем в корзину
-            $count = 1;
+            $count = $param[1];
             $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_basket SET product_id = :product_id, product_count = :product_count, user_id = :user_id");
             // возвращаем результат
             if (!$insertSql->execute([
@@ -1720,32 +1736,37 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         }
         // готовим кнопки
 
-	 $buttons[][] = $this->buildInlineKeyBoardButton( $count, "basketViewParam_0_0");
-        // 2 ряд кнопок для управление количеством товара в корзине
-        $buttons[] = [
-            $this->buildInlineKeyBoardButton('✖', 'basketRemoveProduct_' . $item['id'] . '_' . $begin),
-            $this->buildInlineKeyBoardButton('▼', 'basketCountProduct_0_' . $item['id'] . '_' . $begin),
-            $this->buildInlineKeyBoardButton($item['count'], 'basketViewParam_' . $item['count'] . '_0'),
-            $this->buildInlineKeyBoardButton('▲', 'basketCountProduct_1_' . $item['id'] . '_' . $begin),
-        ];
-        // 3 ряд кнопок перелистывание товаров в корзине если товара больше одного
-        $buttons[][] = $this->buildInlineKeyBoardButton('✔ Оформить - ' . $sum . ' тг.', 'setOrder_0');
+$buttons[][] = $this->buildInlineKeyBoardButton('✅ Добавлено ' ,"showKlava_".$param[1]."_1_".$param[3]);
+$buttons[][] = $this->buildInlineKeyBoardButton('🚘 Оформить заказ ' , 'setOrder_0');
 
+$id=$param[1];
+   $checks = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $checks->execute(['id' => $id]);
 
-        // готовим данные
-        $fields = [
+$text = $param[3];
+$ku = $checks->fetch();
+
+$sum=$ku['price']*$count;
+$text .="Добавлено в корзину: ".$count." ".$ku['unit'];
+$text .="\nСумма: ".$sum." тг.";
+
+  $fields = [
             'chat_id' => $chat_id,
             'message_id' => $this->getMessageId($data),
+            'parse_mode' => 'html',
+            'caption' =>$text,
             'reply_markup' => $this->buildInlineKeyBoard($buttons),
         ];
-        // отправляем на изменение сообщения
-        $upMessage = $this->botApiQuery("editMessageReplyMarkup", $fields);
-        // если обновление прошло успешно
-        if ($upMessage['ok']) {
-            $this->notice($data['id'], "Товар добавлен в корзину");
-        } else {
-            $this->notice($data['id'], "_Ошибка добавления в корзину", true);
-        }
+
+  $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
+
     }
 
     private function addBasket($data)
@@ -1932,9 +1953,9 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         if ($basketCount > 0) {
 	while ($row = $check->fetch()) {
             // получаем данные для отрисовки корзины
-$a++;	
-$text=$a;
- $buttons[][] = $this->buildInlineKeyBoardButton("$a" , "showKlava_" . $row['id'] . '_' . $id);
+$text = "<b>".$row['name']."</b>\n\n";
+$text .= "Цена: ".$row['price']." тг. \n\n";
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $row['id'] . '_' .$id."_".$text);
 
         // отправляем сообщение
      //   $this->botApiQuery("editMessageText", $data_send);
@@ -2057,7 +2078,8 @@ $buttons=array();
     private function drawCat($user_id, $product_id, $cat_id)
         // готовим массив для кнопок корзи)
     {
-	 $buttons[][] = $this->buildInlineKeyBoardButton("В корзину" , "showKlava_" . $product_id . '_' . $cat_id);
+
+	 $buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $product_id . '_' . $cat_id);
 
 
         return [
@@ -2073,15 +2095,25 @@ $buttons=array();
 
    $param = explode("_", $data['data']);
 	$chat_id = $this->getChatId($data);
-  $buttons[][] = $this->buildInlineKeyBoardButton("В корзину" , "showKlava_" . $param['1'] . '_' . $param['2']);
+
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $param['1'] . "_0_". $param['2']);
 
 	$fields = [
             'chat_id' => $chat_id,
             'message_id' => $this->getMessageId($data),
+ 	    'parse_mode' => 'html',
+	    'caption' =>$param['2'],
             'reply_markup' => $this->buildInlineKeyBoard($buttons),
         ];
 
-        $upMessage = $this->botApiQuery("editMessageReplyMarkup", $fields);
+  $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
 
 
     }
@@ -2151,37 +2183,24 @@ $buttons=array();
     }
 
 
-   private function drawBasketButton2($user_id, $item)
+   private function drawBasketButton2($item, $count,$text=NULL)
     {
-	$check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
-        $check->execute(['product_id' => $item, 'user_id' => $chat_id]);
-	$basket = $check->fetch();
-
-	if ($check->rowCount() === 0) {
-		$item['count']=1;
-		} else {
-	$item['count'] = $basket['product_count'];
-		}
 
         // достаем товар
-        $product_id = $item;
         // достаем модель продукта
-        $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
-        $model_product->execute(['id' => $product_id]);
         // готовим массив для кнопок корзины
-        $item['id'] = $item;
-        $item['count'] = $basket['product_count'];
-
-        // 1 ряд кнопок
         // 2 ряд кнопок для управление количеством товара в корзине
+
+
         $buttons[] = [
-            $this->buildInlineKeyBoardButton('✖', 'drawCat2_' . $item['id'] . '_0'),
-            $this->buildInlineKeyBoardButton('▼', 'basketCountProduct_0_' . $item['id'] . '_0'),
-            $this->buildInlineKeyBoardButton($item['count'], 'basketViewParam_' . $item['count'] . '_0'),
-            $this->buildInlineKeyBoardButton('▲', 'basketCountProduct_1_' . $item['id'] . '_0'),
+            $this->buildInlineKeyBoardButton('⬅️', 'drawCat2_'.$item ."_".$text),
+$this->buildInlineKeyBoardButton('➖', 'PluseProduct_0_' . $count.'_'.$item.'_'.$text),
+$this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_'.$text),
+   $this->buildInlineKeyBoardButton('➕', 'PluseProduct_1_' .$count.'_'.$item.'_'.$text),
+
         ];
         // 3 ряд кнопок перелистывание товаров в корзине если товара больше одного
-        $buttons[][] = $this->buildInlineKeyBoardButton('✔ Оформить -  тг.', 'setOrder_0');
+        $buttons[][] = $this->buildInlineKeyBoardButton( ' ✔️ В корзину', 'addBasket2_'.$item."_".$count."_".$text);
         // возвращаем результат
         return $buttons;
     }
@@ -2198,7 +2217,7 @@ $buttons=array();
         $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
         $check->execute(['user_id' => $user_id]);
         // итоговую сумму определяем как ноль
-        $total = 0.00;
+        $total = 0;
         // перебираем массив
         while ($model = $check->fetch()) {
             $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
@@ -2323,6 +2342,43 @@ $buttons=array();
                 // выводм ошибку
                 $text = "Произошла ошибка";
             }
+        }
+        // выводим уведомление
+        $this->notice($data['id'], $text);
+    }
+
+
+
+
+	    private function PluseProduct($data)
+    {
+        // 1 - тип, 2- id, 3- begin
+        $param = explode("_", $data['data']);
+        // достаем модель из корзины
+        // достаем товар
+        $user_id = $this->getChatId($data);
+
+        // если удалять нельзя
+        if (!$param[1] && $param[2] < 2) {
+            // предлагаем пользователю удалить товар
+            $text = "Укажите количество товара";
+        } else {
+            // меняем количество товара
+            $count = (!$param[1]) ? $param[2] - 1 : $param[2] + 1;
+            // сохраняем
+                // получаем кнопки
+                $buttons = $this->drawBasketButton2(
+			$param[3],
+			$count,
+			$param[4],);
+                // меняем клавиатуру
+                $this->botApiQuery("editMessageReplyMarkup", [
+                    'chat_id' => $user_id,
+                    'message_id' => $data['message']['message_id'],
+                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                ]);
+                // пишем уведомление
+                $text = ($param[1]) ? "" : "";
         }
         // выводим уведомление
         $this->notice($data['id'], $text);
@@ -2684,7 +2740,7 @@ $buttons=array();
             $orderProduct = $this->pdo->prepare("SELECT * FROM bot_shop_order_product WHERE parent_id = :parent_id");
             $orderProduct->execute(['parent_id' => $orderRaw['id']]);
             // итоговую сумму определяем как ноль
-            $total = 0.00;
+            $total = 0;
             $goods = "";
 
             // перебираем массив
