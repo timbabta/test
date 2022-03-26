@@ -151,6 +151,9 @@ class ShopBot
                 } else { // если не ждем картинок то предупереждение
                     $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
                 }
+	    } elseif (array_key_exists("contact", $data['message'])) {
+		$this->sendMessage($chat_id, $data['message']['contact']['phone_number']);
+
             } else { // другие данные - документы стикеры аудио ...
                 $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
             }
@@ -164,8 +167,7 @@ class ShopBot
             $this->$func($data['callback_query']);
         } // Здесь пришли пока не нужные нам форматы
         else {
-            // вернем текст с ошибкой
-            $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+			   $this->sendMessage($chat_id, "Пока не нужны эти данные. Спасибо.");
         }
         return true;
     }
@@ -1241,6 +1243,7 @@ class ShopBot
             // проходим циклом по полученным данным из базы
             while ($row = $category->fetch()) {
                 // Добавляем кнопки для категорий
+		 
                 $buttons[][] = $this->buildInlineKeyBoardButton($row['name'], "showUserCategory_" . $row['id']);
             }
         } else {
@@ -1248,6 +1251,11 @@ class ShopBot
             $buttons = NULL;
             $text .= "\nВ магазине ничего нет";
         }
+       $buttons_first[0] = [
+             $this->buildKeyboardButton("О нас",true),
+             $this->buildKeyboardButton("\xF0\x9F\x93\x9D Мои заказы"),
+          ];
+ 	$this->sendMessage($chat_id, $text,$buttons_first,true);
         // отправляем привет
         $this->sendMessage($chat_id, $text, $buttons);
     }
@@ -2347,7 +2355,7 @@ class ShopBot
      * @param null $buttons
      * @return mixed
      */
-    private function sendMessage($user_id, $text, $buttons = NULL)
+ private function sendMessage($user_id, $text, $buttons = NULL,$type = false)
     {
         // готовим массив данных
         $data_send = [
@@ -2356,10 +2364,9 @@ class ShopBot
             'parse_mode' => 'html'
         ];
         // если переданны кнопки то добавляем их к сообщению
-        if (!is_null($buttons) && is_array($buttons)) {
-            $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
-        }
-        // отправляем текстовое сообщение
+	 if (!is_null($buttons) && is_array($buttons)) {
+            $data_send['reply_markup'] = !$type ? $this->buildInlineKeyBoard($buttons) : $this->buildKeyBoard($buttons);
+        }        // отправляем текстовое сообщение
         return $this->botApiQuery("sendMessage", $data_send);
     }
 

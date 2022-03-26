@@ -1,4 +1,5 @@
-\\<?php
+
+<?php
 //ini_set('error_reporting', E_ALL);
 //ini_set('display_errors', 1);
 //ini_set('display_startup_errors', 1);
@@ -17,7 +18,7 @@ class ShopBot
 {
     // первичные данные
     private $token = "5104085784:AAEiwPaUWQfQ9dPdWuz8Lqlfl1VCR5NbP64";
-    private $admin = "8665373851"; // Ваш id в ТЕЛеГРАМ
+    private $admin = "866537385"; // Ваш id в ТЕЛеГРАМ
     private $helloText = "Привет, ";
     private $img_path = "img"; // путь до директории с картинками относительно этого файла
 
@@ -81,7 +82,7 @@ class ShopBot
 
                 // если это пришел старт бота
                 if ($text == "/start") {
-                    $this->startBot($chat_id, $data);
+                    $this->gostart($chat_id, $data);
                 } elseif ($text == "/admin" && $this->isAdmin($chat_id)) {
                     // выводим страницу только админу
                     $this->adminPage();
@@ -100,11 +101,21 @@ class ShopBot
 		} elseif ($text == "🛒 Корзина") {
                     // просмотр заказов для пользователя
                     $this->showBasket($data);
+                } elseif ($text == "💦 Вода") {
+                    // просмотр заказов для пользователя
+                    $this->goshowBasket($data,'2');
+
                 } elseif ($text == "/lc") {
                     // просмотр заказов для пользователя
                     $this->userLc($chat_id);
+	        } elseif ($text == "/kp"){
+                        $this->feedBack($data);
 		} elseif ($text == "Мне понятно, где находится кнопка «Меню кнопок»") {
                     $this->showMenu($chat_id,$data,"Отлично! Приятного пользования!");
+		} elseif ($text == "📋 Меню") {
+ 		    $this->goMenu($chat_id,$data);
+		} elseif ($text == "📋 Вернуться в меню") {
+		   $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
 
                 } else { // другие текстовые сообщения
                     // смотрим куда отправить данные
@@ -139,11 +150,15 @@ class ShopBot
                     } elseif (preg_match("~^step_1_phone$~", $actionUser)) {
                         // если ждем данные для добавления телефона
                         $this->savePhoneUser($text, $data);
+		    } elseif (preg_match("~^gostart$~", $actionUser)) {
+                        // если ждем данные для добавления телефона
+                        $this->sendIdent($chat_id, $data);
+
                     } elseif (preg_match("~^step_2_adress$~", $actionUser)) {
                         // если ждем данные для добавления адреса
                         $this->saveAdressUser($text, $data);
                     } else { // если не ждем никаких данных
-                      //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+                        $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
                     }
                 }
             } elseif (array_key_exists("photo", $data['message'])) {
@@ -158,6 +173,9 @@ class ShopBot
                 } else { // если не ждем картинок то предупереждение
              //       $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
                 }
+	   } elseif (array_key_exists("contact", $data['message'])  && preg_match("~^gostart$~", $actionUser)) {
+		$this->saveReal($chat_id, $data);
+
             } else { // другие данные - документы стикеры аудио ...
               //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
             }
@@ -184,6 +202,73 @@ class ShopBot
      * @param $id
      * @param $text
      */
+
+     private function goStart($chat_id, $data)
+     {
+	 $user = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
+         $user->execute(['user_id' => $chat_id]);
+	  if ($user->rowCount() == 0) {
+		$newUser = $this->pdo->prepare("INSERT INTO bot_shop_profile SET user_id = :user_id, first_name = :first_name, last_name = :last_name,   action = 'start'");
+            $newUser->execute([
+                'user_id' => $chat_id,
+                'first_name' => $data['message']['chat']['first_name'],
+		'last_name' =>  $data['message']['chat']['last_name'],
+
+                 ]);
+	$text="Для работы с ботом необходимо отправить контакт\n\nНажмите на кнопку «Отправть контакт»";
+
+        $buttons_[0] = [
+             $this->buildKeyboardButton("Отправить контакт",true),
+          ];
+        $this->sendMessage($chat_id,$text,$buttons_,true);
+ 	 @$this->setActionUser("gostart", $chat_id);
+	}else{
+		if(strlen($user->fetch()['realphone']) > 10){
+	
+		@$this->setActionUser("start", $chat_id);
+		$this->startBot($chat_id, $data);
+	         } else{ 
+	
+      $text="Для работы с ботом необходимо отправить контакт\nНажмите на кнопку «Отправть контакт»";
+
+        $buttons_[0] = [
+             $this->buildKeyboardButton("Отправить контакт",true),
+          ];
+        $this->sendMessage($chat_id,$text,$buttons_,true);
+	@$this->setActionUser("gostart", $chat_id);
+		}
+ 	}
+    }
+
+    
+    private function sendIdent($chat_id, $data)
+    {
+	if(array_key_exists("contact", $data['message'])) {
+             //   $this->sendPhone($chat_id, $data['message']['contact']['phone_number'])
+  	@$this->setActionUser("sendphone", $chat_id);
+	$this->goStart($chat_id, $data);
+
+	}else{
+	$this->goStart($chat_id, $data);
+	}
+    }
+
+  private function saveReal($chat_id, $data)
+    {
+   $update = $this->pdo->prepare("UPDATE bot_shop_profile SET realphone = :realphone WHERE user_id = :user_id");
+        // если обновили то выводим контакты
+        if ($update->execute(['user_id' => $chat_id, 'realphone' => $data['message']['contact']['phone_number']])) {
+            // очищаем действия админа
+            // выводим страницу контактов
+            $this->startBot($chat_id, $data);
+	@$this->setActionUser("start", $chat_id);
+
+        } else {
+            $this->sendMessage($chat_id, "Ошибка при обновлении контактов.");
+        }
+
+    }
+
     private function rederContact($id, $text)
     {
         // запрос на обновление данных
@@ -276,6 +361,7 @@ class ShopBot
     /** просмотр товара
      * @param $data
      */
+
     private function showProduct($data)
     {
         // берем необходимую строку с данными
@@ -324,6 +410,45 @@ class ShopBot
             }
         }
     }
+
+	 private function goshowProduct2($data,$id)
+	    {
+ 	$chat_id = $this->getChatId($data);
+ 	@$this->setActionUser("cat", $chat_id);
+	$this->showBasketBegin2($chat_id,$data);
+
+	    }
+
+     private function showProduct2($data,$id)
+    {
+ 	$chat_id = $this->getChatId($data);
+
+	@$this->setActionUser("", $chat_id);
+
+        // запрос на проверку есть ли такая категория в базе
+        $checkHref = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        // выполняем запрос
+        $checkHref->execute(['id' => $id]);
+        // если вернулось ноль строк
+        if ($checkHref->rowCount() === 0) {
+            // выводим ошибку
+        //    $this->notice($data['id'], "Ссылка устарела");
+            // удаляем сообщение с кнопками из чата
+          //  $this->botApiQuery("deleteMessage", ['chat_id' => $this->admin, 'message_id' => $data['message']['message_id']]);
+        } else {
+            // добавляем кнопку назад
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton("Test", "showCategory_0"),
+            ];
+	$text ='test1';
+ 	$photo = $checkHref->fetch()['image'];
+	$buttons_ = $this->buildInlineKeyBoard($buttons);
+
+	$this->sendPhoto($chat_id,$photo,$text,$buttons_);
+
+        }
+    }
+
 
     /** удаляем категорию
      * @param $data
@@ -649,7 +774,7 @@ class ShopBot
                     // получаем все о товаре
                     $text .= $this->prepareProduct($product, "_temp");
                     // добавляем инструкцию
-                    $text .= "\nДобавьте цену товара в формате 0.00 (целое и положительное):";
+                    $text .= "\nДобавьте цену товара в формате 0 (целое и положительное):";
                     // добавляем кнопку отменить
                     $buttons[] = [
                         $this->buildInlineKeyBoardButton("Отменить", "addProductCancel_" . $category . "_" . $product),
@@ -750,6 +875,92 @@ class ShopBot
             return $text;
         }
     }
+ 
+  private function prepareProduct2($id, $type = "")
+    {
+        $product = $this->pdo->prepare("SELECT * FROM bot_shop_product" . $type . " WHERE id = :id");
+        $product->execute(['id' => $id]);
+        if ($product->rowCount() === 0) {
+            return false;
+        } else {
+	    $item = $product->fetch(); 
+            // создаем переменную для складирования текста
+            $text = "";
+
+            // данные картикни
+            if (empty($item['image'])) {
+                $image = "Не загружена";
+            } else {
+                // получаем путь относительно домена
+                $path = $_SERVER['PHP_SELF'];
+                // получаем вхождение последнего слеша
+                $path_len = mb_strripos($_SERVER['PHP_SELF'], "/");
+                // отрезаем имя файла - получаем путь до текущей директории
+                $path_new = mb_strcut($path, 0, $path_len + 1);
+                $image = "";
+                $text .= "<a href='https://" . $_SERVER['SERVER_NAME'] . $path_new . $item['image'] . "'>&#8203;&#8203;</a>";
+            }
+	    $text .= "<b>Картинка: </b>" . $image . "\n";
+            $text .= "<b>Название: </b>" . $item['name'] . "\n";
+            $text .= "<b>Описание: </b>" . $item['description'] . "\n";
+            $text .= "<b>Цена: </b>" . $item['price'] . "\n";
+            $text .= "<b>Ед.изм: </b>" . $item['unit'] . "\n";
+            // возвращаем данные
+            return $text;
+        
+       }
+    }
+
+   private function sendPhoto($id, $user_id, $buttons=NULL)
+    {
+        $product = $this->pdo->prepare("SELECT * FROM bot_shop_product  WHERE id = :id");
+        $product->execute(['id' => $id]);
+        if ($product->rowCount() === 0) {
+            return false;
+        } else {
+            $item = $product->fetch();
+            // создаем переменную для складирования текста
+	$data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
+
+            // данные картикни
+            if (empty($item['image'])) {
+                $image = "Не загружена";
+            } else {
+                // получаем путь относительно домена
+                $path = $_SERVER['PHP_SELF'];
+                // получаем вхождение последнего слеша
+                $path_len = mb_strripos($_SERVER['PHP_SELF'], "/");
+                // отрезаем имя файла - получаем путь до текущей директории
+                $path_new = mb_strcut($path, 0, $path_len + 1);
+                $image = "";
+                $text = 'https://' . $_SERVER['SERVER_NAME'] . $path_new . $item['image'];
+            }
+	$data_send = [
+            'chat_id' => $user_id,
+            'photo' => $text,
+	    'caption' => 'test',
+	    'reply_markup' => $buttons,
+        ];
+        // отправляем текстовое сообщение
+        return $this->botApiQuery("sendPhoto", $data_send);
+
+
+       }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /** Отменяем добавление товара
      * @param $data
@@ -1216,7 +1427,8 @@ class ShopBot
      * @param $chat_id
      */
     private function startBot($chat_id, $data)
-    {
+    { 
+	
         // достаем пользователя из базы
         $user = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
         $user->execute(['user_id' => $chat_id]);
@@ -1297,13 +1509,64 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
              $this->buildKeyboardButton("📝 Мои заказы"),
           ];
 
-          $buttons_first[4] = [
-             $this->buildKeyboardButton("👩  Связаться с менеджером"),
+
+ $this->sendMessage($chat_id,$text,$buttons_first,true,true);
+    }
+
+
+
+ private function goMenu($chat_id, $data,$text = NULL)
+    {
+
+	$text = "Выберите категорию:";
+//      $text= "Отлично! Приятного пользования!";
+  @$this->setActionUser("cat", $chat_id);
+
+
+ $buttons_first[] = [
+            $this->buildKeyboardButton("💦 Вода"),
+            $this->buildKeyboardButton("🍼 Тара"),
+          ];
+
+
+        $buttons_first[] = [
+            $this->buildKeyboardButton("🛒 Корзина"),
+            $this->buildKeyboardButton("🚘 Оформить заказ"),
+          ];
+
+        $buttons_first[] = [
+             $this->buildKeyboardButton("📋 Вернуться в меню"),
           ];
 
  $this->sendMessage($chat_id,$text,$buttons_first,true,true);
     }
 
+
+    private function showProdu($chat_id,$catid)
+  {
+	        $text = "Выберите :";
+//      $text= "Отлично! Приятного пользования!";
+ // @$this->setActionUser("product", $chat_id);
+
+
+ $buttons_first[] = [
+            $this->buildKeyboardButton("💦 Вода"),
+            $this->buildKeyboardButton("🍼 Тара"),
+          ];
+
+
+        $buttons_first[] = [
+            $this->buildKeyboardButton("🛒 Корзина"),
+            $this->buildKeyboardButton("🚘 Оформить заказ"),
+          ];
+
+        $buttons_first[] = [
+             $this->buildKeyboardButton("📋 Вернуться в меню"),
+          ];
+
+ $this->sendMessage($chat_id,$text,$buttons_first,true,true);
+
+	}
 
     private function showCatalog($data)
     {
@@ -1332,6 +1595,43 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         // уведомляем
         $this->notice($data['id']);
     }
+
+
+   private function BasketMes($data)
+    {
+	$param = explode("_", $data['data']);
+        // получаем данные
+        $chat_id = $this->getChatId($data);
+        // меняем дуйствие
+        // готовим текст
+
+        $text = "Укажите количество товара\n\n";
+	$text .=$param[3];
+        // получаем категории из базы где категории не скрыты
+	$buttons=$this->showBasketButton($param[1],$param[2],$param[4]);
+
+	 $data_send = [
+            'chat_id' => $chat_id,
+            'text' => $text,
+            'message_id' => $this->getMessageId($data),
+            'parse_mode' => 'html',
+        ];
+
+	if (isset($buttons)) {
+            $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
+        }
+
+
+        // отправляем привет
+	$this->botApiQuery("editMessageText", $data_send);
+
+        // уведомляем
+  $this->notice($data['id'], "");
+
+    }
+
+
+
 
     /** Выводим Категорию пользователю
      * @param $data
@@ -1442,6 +1742,183 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
      * @param $data
      * @return bool
      */
+  private function showKlava($data)
+   {
+        $param = explode("_", $data['data']);
+        $chat_id = $this->getChatId($data);
+
+	$check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
+        $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
+        $basket = $check->fetch();
+
+        if ($check->rowCount() === 0) {
+                $count=1;
+                } else {
+        $count = $basket['product_count'];
+                }
+
+        // проверяем есть ли уже в корзине этот товар
+       $buttons = $this->drawBasketButton2($param[1],$count,$param[3]);
+/*
+	        $fields = [
+            'chat_id' => $chat_id,
+            'message_id' => $this->getMessageId($data),
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+        ];
+        // отправляем на изменение сообщения
+*/
+	if ($param[2] === 0){
+	$text = $param[3];
+	}else{
+	$text = $param[3]."Выберите количество товара";
+	}	
+   $fields = [
+                'chat_id' => $chat_id,
+                'message_id' => $this->getMessageId($data),
+		'caption' => $text,
+	        'parse_mode' => 'html',
+                'reply_markup' => $this->buildInlineKeyBoard($buttons),
+            ];
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
+/*
+   $fields = [
+            'chat_id' => $chat_id,
+            'message_id' => $this->getMessageId($data),
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+        ];
+
+        $upMessage = $this->botApiQuery("editMessageReplyMarkup", $fields);
+        // если обновление прошло успешно
+        if ($upMessage['ok']) {
+            $this->notice($data['id'], "Товар добавлен в корзину");
+        } else {
+            $this->notice($data['id'], "_Ошибка добавления в корзину", true);
+        }
+
+*/
+
+   }
+  
+  private function addBasket2($data)
+    {
+        // 1 - product_id, 2 - category_id
+        $param = explode("_", $data['data']);
+        $chat_id = $this->getChatId($data);
+        // проверяем есть ли уже в корзине этот товар
+        $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
+        $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
+        // условие проверки
+        if ($check->rowCount() > 0) {
+            // пишем количесвто в переменную
+            $count = $param[2];
+            $updateSql = $this->pdo->prepare("UPDATE bot_shop_basket SET product_count = :product_count  WHERE product_id = :product_id AND user_id = :user_id");
+            // обновляем видимость
+            if (!$updateSql->execute([
+                'product_count' => $count,
+                'product_id' => $param[1],
+                'user_id' => $chat_id,
+            ])) {
+                $this->notice($data['id'], "Ошибка_ добавления в корзину", true);
+                return true;
+            }
+        } else {
+            // если товара в корзине нет то добавляем в корзину
+            $count = $param[1];
+            $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_basket SET product_id = :product_id, product_count = :product_count, user_id = :user_id");
+            // возвращаем результат
+            if (!$insertSql->execute([
+                'product_id' => $param[1],
+                'product_count' => $count,
+                'user_id' => $chat_id
+            ])
+            ) {
+                $this->notice($data['id'], "Ошибка добавления в корзину", true);
+                return true;
+            }
+        }
+
+$buttons[][] = $this->buildInlineKeyBoardButton('✅ Добавлено ' ,"showKlava_".$param[1]."_1_".$param[3]);
+$buttons[][] = $this->buildInlineKeyBoardButton('🚘 Оформить заказ ' , 'setOrder_0');
+
+$id=$param[1];
+   $checks = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $checks->execute(['id' => $id]);
+
+$text = $param[3];
+$ku = $checks->fetch();
+
+$sum=$ku['price']*$count;
+$text .="Добавлено в корзину: ".$count." ".$ku['unit'];
+$text .="\nСумма: ".$sum." тг.";
+
+  $fields = [
+            'chat_id' => $chat_id,
+            'message_id' => $this->getMessageId($data),
+            'parse_mode' => 'html',
+            'caption' =>$text,
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+        ];
+
+  $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
+
+    }
+
+ private function addBasket3($data)
+    {
+        // 1 - product_id, 2 - category_id
+        $param = explode("_", $data['data']);
+        $chat_id = $this->getChatId($data);
+        // проверяем есть ли уже в корзине этот товар
+        $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
+        $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
+        // условие проверки
+        if ($check->rowCount() > 0) {
+            // пишем количесвто в переменную
+            $count = $param[2];
+            $updateSql = $this->pdo->prepare("UPDATE bot_shop_basket SET product_count = :product_count  WHERE product_id = :product_id AND user_id = :user_id");
+            // обновляем видимость
+            if (!$updateSql->execute([
+                'product_count' => $count,
+                'product_id' => $param[1],
+                'user_id' => $chat_id,
+            ])) {
+                $this->notice($data['id'], "Ошибка_ добавления в корзину", true);
+                return true;
+            }
+        } else {
+            // если товара в корзине нет то добавляем в корзину
+            $count = $param[1];
+            $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_basket SET product_id = :product_id, product_count = :product_count, user_id = :user_id");
+            // возвращаем результат
+            if (!$insertSql->execute([
+                'product_id' => $param[1],
+                'product_count' => $count,
+                'user_id' => $chat_id
+            ])
+            ) {
+                $this->notice($data['id'], "Ошибка добавления в корзину", true);
+                return true;
+            }
+        }
+
+  $this->showBasketBeginNew($chat_id, $data,1);
+
+}
     private function addBasket($data)
     {
         // 1 - product_id, 2 - category_id
@@ -1512,15 +1989,30 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         // меняем действие
         @$this->setActionUser("show_basket", $chat_id);
         // Выводим корзину
-        $this->showBasketBegin($chat_id, $data);
+        $this->showBasketBeginNew($chat_id, $data);
         // глушим уведомление
-       $this->notice($data['id']);
+//       $this->notice($data['id']);
     }
+
+  private function goshowBasket($data,$id)
+    {
+        // получаем данные
+        $chat_id = $this->getChatId($data);
+        // меняем действие
+        @$this->setActionUser("show_basket2", $chat_id);
+        // Выводим корзину
+        $this->showBasketBegin2($chat_id,$id);
+        // глушим уведомление
+//       $this->notice($data['id']);
+    }
+
 
     /** Выводим корзину
      * @param $user_id
      * @param $data
      */
+
+
 
     private function showBasketBegin($user_id, $data)
     {
@@ -1552,42 +2044,197 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         }
         // отправляем сообщение
      //   $this->botApiQuery("editMessageText", $data_send);
-	$this->botApiQuery("sendMessage", $data_send);
+        $this->botApiQuery("sendMessage", $data_send);
 
     }
 
 
- private function showBasketBegin2($user_id, $data)
+    private function showBasketBeginNew($user_id, $data,$type=NULL)
     {
         // получаем все из корзины пользователя
         $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
         $check->execute(['user_id' => $user_id]);
         // количество в корзине
         $basketCount = $check->rowCount();
-
         // если в корзине что-то есть
         if ($basketCount > 0) {
+
+
+        $model_basket = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+        $model_basket->execute(['user_id' => $user_id]);	
+	$text = "Ваш заказ\n\n";
+
+        	while($basket = $model_basket->fetch()){
+        // достаем товар
+       		 $product_id = $basket['product_id'];
+        // достаем модель продукта
+      		  $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+      		  $model_product->execute(['id' => $product_id]);
+        // готовим массив для кнопок корзины
+		$lol= $model_product->fetch();
+  		  $count = $basket['product_count'];
+      		  $price = $lol['price'];
+	          $unit = $lol['unit'];
+		  $name = $lol['name'];
+		  $barl= $price*$count;
+		  $id= $basket['id'];
+	 $text .= $name."\n";	
+	 $text .= $count." ".$unit." x ".$price." = ".$barl." тг.\n\n";
+
+
+$buttons[][] = $this->buildInlineKeyBoardButton($name, 'BasketMes_'.$product_id."_".$count."_".$name."_".$id);
+        // возвращаем результат
+		}
+
+	$sum = $this->totalSumOrder($user_id);
+	$text .="Итого: ".$sum." тг.";
+
+$text .="\n\nВыберите товар, чтобы изменить количество ⤵️";
             // получаем данные для отрисовки корзины
-            $array = $this->drawBasket($user_id, 0, $basketCount);
-            $text = $array['text'];
-            $buttons = $array['buttons'];
         } else {
             // если в корзине пусто
-            $text = "🧐  У вас нет добавленных товаров в корзине.";
+            $text = "У вас нет добавленных товаров в корзине.";
         }
         // готовим данные для отображения
         $data_send = [
             'chat_id' => $user_id,
             'text' => $text,
+            'message_id' => $this->getMessageId($data),
             'parse_mode' => 'html',
         ];
         // проверяем наличие кнопок
-        if (is_array($buttons)) {
+        if (isset($buttons)) {
             $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
         }
+        // отправляем сообщение
+	if(isset($type)){
+       $this->botApiQuery("editMessageText", $data_send);
+	}else{
+	$this->botApiQuery("sendMessage", $data_send);
+	}
+    }
+
+
+    private function showBasketBegin3($user_id, $data)
+    {
+        // получаем все из корзины пользователя
+        $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+        $check->execute(['user_id' => $user_id]);
+        // количество в корзине
+        $basketCount = $check->rowCount();
+        // если в корзине что-то есть
+        if ($basketCount > 0) {
+            // получаем данные для отрисовки корзины
+            $array = $this->drawBasket3($user_id, 0, $basketCount);
+            $text = $array['text'];
+            $buttons = $array['buttons'];
+        } else {
+            // если в корзине пусто
+            $text = "У вас нет добавленных товаров в корзине.";
+        }
+        // готовим данные для отображения
+        // проверяем наличие кнопок
+
+        if (isset($buttons)) {
+            $fields['reply_markup'] = $this->buildInlineKeyBoard($buttons);
+        }
+        // отправляем сообщение
+     //   $this->botApiQuery("editMessageText", $data_send);
+       $fields = [
+                'chat_id' => $user_id,
+                'message_id' => $this->getMessageId($data),
+                'caption' => 'Выберите количество товара:',
+            ];
+            // отправляем на изменение сообщения
+            $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "Укажите количество");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
+
+    }
+
+
+
+
+ private function showBasketBegin2($user_id,$id)
+    {
+        // получаем все из корзины пользователя
+        $check = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE parent = :id and hide = 0");
+        $check->execute(['id' => $id]);
+        // количество в корзине
+        $basketCount = $check->rowCount();
+	$a=0;
+        // если в корзине что-то есть
+        if ($basketCount > 0) {
+	while ($row = $check->fetch()) {
+            // получаем данные для отрисовки корзины
+$text = "<b>".$row['name']."</b>\n\n";
+$text .= "Цена: ".$row['price']." тг. \n\n";
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $row['id'] . '_' .$id."_".$text);
 
         // отправляем сообщение
+     //   $this->botApiQuery("editMessageText", $data_send);
+
+            // данные картикни
+            if (empty($row['image'])) {
+                $image = "Не загружена";
+            } else {
+                // получаем путь относительно домена
+                $path = $_SERVER['PHP_SELF'];
+                // получаем вхождение последнего слеша
+                $path_len = mb_strripos($_SERVER['PHP_SELF'], "/");
+                // отрезаем имя файла - получаем путь до текущей директории
+                $path_new = mb_strcut($path, 0, $path_len + 1);
+                $image = "";
+                $photo = 'https://' . $_SERVER['SERVER_NAME'] . $path_new . $row['image'];
+            }
+        // отправляем текстовое сообщение
+ $data_send = [
+	    'photo' => $photo,
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+
+            'chat_id' => $user_id,
+            'caption' => $text,
+         //   'message_id' => $this->getMessageId($data),
+            'parse_mode' => 'html',
+        ];
+$this->botApiQuery("sendPhoto", $data_send);
+$buttons=array();
+        // проверяем наличие кнопок
+        // отправляем сообщение
+     //   $this->botApiQuery("editMessageText", $data_send);
+ //       $this->botApiQuery("sendMessage", $data_send);
+
+
+ usleep(700000);
+		}
+        } 
+
+}
+/*else {
+            // если в корзине пусто
+            $text = "У вас нет добавленных товаров в корзине.";
+	 $data_send = [
+            'chat_id' => $user_id,
+            'text' => $text,
+            'message_id' => $this->getMessageId($data),
+            'parse_mode' => 'html',
+        ];
+        // проверяем наличие кнопок
+        // отправляем сообщение
+     //   $this->botApiQuery("editMessageText", $data_send);
+       // $this->botApiQuery("sendMessage", $data_send);
+        }
+
+
     }
+
+
+*/
 
     /** Рисуем корзину для начала
      * @param $user_id
@@ -1619,6 +2266,75 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
                 $item,
                 $this->totalSumOrder($user_id)),
         ];
+    }
+
+
+    private function drawBasket3($user_id, $begin, $basketCount)
+    {
+        // достаем модель из корзины
+        $model_basket = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id ORDER BY id DESC LIMIT " . $begin . ", 1");
+        $model_basket->execute(['user_id' => $user_id]);
+        $basket = $model_basket->fetch();
+        // достаем товар
+        $product_id = $basket['product_id'];
+        // достаем модель продукта
+        $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $model_product->execute(['id' => $product_id]);
+        // готовим массив для кнопок корзины
+        $item['id'] = $basket['id'];
+        $item['count'] = $basket['product_count'];
+        $item['price'] = $model_product->fetch()['price'];
+        // возвращаем результат
+        return [
+            'buttons' => $this->drawBasketButton3(
+                $begin,
+                $basketCount,
+                $item),
+        ];
+    }
+
+
+    private function drawCat($user_id, $product_id, $cat_id)
+        // готовим массив для кнопок корзи)
+    {
+
+	 $buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $product_id . '_' . $cat_id);
+
+
+        return [
+            'text' => $this->prepareProduct2($product_id),
+            'buttons' =>$buttons ,
+        ];
+    }
+
+
+  private function drawCat2($data)
+        // готовим массив для кнопок корзи)
+    {
+
+   $param = explode("_", $data['data']);
+	$chat_id = $this->getChatId($data);
+
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $param['1'] . "_0_". $param['2']);
+
+	$fields = [
+            'chat_id' => $chat_id,
+            'message_id' => $this->getMessageId($data),
+ 	    'parse_mode' => 'html',
+	    'caption' =>$param['2'],
+            'reply_markup' => $this->buildInlineKeyBoard($buttons),
+        ];
+
+  $upMessage = $this->botApiQuery("editMessageCaption", $fields);
+            // если обновление прошло успешно
+            if ($upMessage['ok']) {
+                $this->notice($data['id'], "");
+            } else {
+                $this->notice($data['id'], "Ошибка");
+            }
+
+
+
     }
 
     /** Рисуем кнопки корзины
@@ -1655,6 +2371,88 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         return $buttons;
     }
 
+
+
+
+    private function drawBasketButton3($begin, $basketCount, $item)
+    {
+        // 1 ряд кнопок
+        $buttons[][] = $this->buildInlineKeyBoardButton($item['price'] . ' * ' . $item['count'] . ' = ' . ($item['count'] * $item['price']) . " тг.", "basketViewParam_0_0");
+        // 2 ряд кнопок для управление количеством товара в корзине
+        $buttons[] = [
+            $this->buildInlineKeyBoardButton('✖', 'basketRemoveProduct_' . $item['id'] . '_' . $begin),
+            $this->buildInlineKeyBoardButton('▼', 'basketCountProduct_0_' . $item['id'] . '_' . $begin),
+            $this->buildInlineKeyBoardButton($item['count'], 'basketViewParam_' . $item['count'] . '_0'),
+            $this->buildInlineKeyBoardButton('▲', 'basketCountProduct_1_' . $item['id'] . '_' . $begin),
+        ];
+        // 3 ряд кнопок перелистывание товаров в корзине если товара больше одного
+        if ($basketCount > 1) {
+            $prev = ($begin == 0) ? $basketCount - 1 : $begin - 1;
+            $next = ($basketCount == $begin + 1) ? 0 : $begin + 1;
+            $buttons[] = [
+                $this->buildInlineKeyBoardButton('<<', 'basketGoProduct_' . $prev),
+                $this->buildInlineKeyBoardButton(($begin + 1) . ' из ' . $basketCount, 'basketViewParam_0_' . $basketCount),
+                $this->buildInlineKeyBoardButton('>>', 'basketGoProduct_' . $next),
+            ];
+        }
+        // 4 кнопка оформить заказ
+        $buttons[][] = $this->buildInlineKeyBoardButton('✔ Оформить - ' . $sum . ' тг.', 'setOrder_0');
+        // возвращаем результат
+        return $buttons;
+    }
+
+
+   private function drawBasketButton2($item, $count,$text=NULL)
+    {
+
+        // достаем товар
+        // достаем модель продукта
+        // готовим массив для кнопок корзины
+        // 2 ряд кнопок для управление количеством товара в корзине
+
+
+        $buttons[] = [
+            $this->buildInlineKeyBoardButton('⬅️', 'drawCat2_'.$item ."_".$text),
+$this->buildInlineKeyBoardButton('➖', 'PluseProduct_0_' . $count.'_'.$item.'_'.$text),
+$this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_'.$text),
+   $this->buildInlineKeyBoardButton('➕', 'PluseProduct_1_' .$count.'_'.$item.'_'.$text),
+
+        ];
+        // 3 ряд кнопок перелистывание товаров в корзине если товара больше одного
+        $buttons[][] = $this->buildInlineKeyBoardButton( ' ✔️ В корзину', 'addBasket2_'.$item."_".$count."_".$text);
+        // возвращаем результат
+        return $buttons;
+    }
+
+
+ private function showBasketButton($item, $count,$text)
+    {
+
+        // достаем товар
+        // достаем модель продукта
+        // готовим массив для кнопок корзины
+        // 2 ряд кнопок для управление количеством товара в корзине
+
+
+        $buttons[] = [
+   $this->buildInlineKeyBoardButton('🗑', 'basketRemoveProduct_' . $text."_0"),
+
+
+$this->buildInlineKeyBoardButton('➖', 'PluseProduct2_0_'.$count.'_'.$item.'_'.$text),
+
+$this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_'.$text),
+
+ $this->buildInlineKeyBoardButton('➕', 'PluseProduct2_1_' .$count.'_'.$item.'_'.$text),
+        ];
+        // 3 ряд кнопок перелистывание товаров в корзине если товара больше одного
+        $buttons[][] = $this->buildInlineKeyBoardButton( ' Ok', 'addBasket3_'.$item."_".$count."_".$text);
+        // возвращаем результат
+        return $buttons;
+    }
+
+
+
+
     /** Итоговая сумма заказа
      * @param $user_id
      * @return float
@@ -1665,7 +2463,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
         $check->execute(['user_id' => $user_id]);
         // итоговую сумму определяем как ноль
-        $total = 0.00;
+        $total = 0;
         // перебираем массив
         while ($model = $check->fetch()) {
             $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
@@ -1795,6 +2593,134 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
         $this->notice($data['id'], $text);
     }
 
+
+
+
+	    private function PluseProduct($data)
+    {
+        // 1 - тип, 2- id, 3- begin
+        $param = explode("_", $data['data']);
+        // достаем модель из корзины
+        // достаем товар
+        $user_id = $this->getChatId($data);
+
+        // если удалять нельзя
+        if (!$param[1] && $param[2] < 2) {
+            // предлагаем пользователю удалить товар
+            $text = "Укажите количество товара";
+        } else {
+            // меняем количество товара
+            $count = (!$param[1]) ? $param[2] - 1 : $param[2] + 1;
+            // сохраняем
+                // получаем кнопки
+                $buttons = $this->drawBasketButton2(
+			$param[3],
+			$count,
+			$param[4],);
+                // меняем клавиатуру
+                $this->botApiQuery("editMessageReplyMarkup", [
+                    'chat_id' => $user_id,
+                    'message_id' => $data['message']['message_id'],
+                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                ]);
+                // пишем уведомление
+                $text = ($param[1]) ? "" : "";
+        }
+        // выводим уведомление
+        $this->notice($data['id'], $text);
+    }
+
+        private function PluseProduct2($data)
+    {
+        // 1 - тип, 2- id, 3- begin
+        $param = explode("_", $data['data']);
+        // достаем модель из корзины
+        // достаем товар
+        $user_id = $this->getChatId($data);
+
+        // если удалять нельзя
+        if (!$param[1] && $param[2] < 2) {
+            // предлагаем пользователю удалить товар
+            $text = "Просто удалите товар";
+        } else {
+            // меняем количество товара
+            $count = (!$param[1]) ? $param[2] - 1 : $param[2] + 1;
+            // сохраняем
+                // получаем кнопки
+                $buttons = $this->showBasketButton(
+                        $param[3],
+                        $count,
+                        $param[4],);
+                // меняем клавиатуру
+                $this->botApiQuery("editMessageReplyMarkup", [
+                    'chat_id' => $user_id,
+                    'message_id' => $data['message']['message_id'],
+                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                ]);
+                // пишем уведомление
+                $text = ($param[1]) ? "" : "";
+        }
+        // выводим уведомление
+        $this->notice($data['id'], "");
+    }
+
+ private function basketCountProduct2($data)
+    {
+        // 1 - тип, 2- id, 3- begin
+        $param = explode("_", $data['data']);
+        // достаем модель из корзины
+        $model_basket = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE id = :id");
+        $model_basket->execute(['id' => $param[2]]);
+        $basket = $model_basket->fetch();
+        // достаем товар
+        $product_id = $basket['product_id'];
+        $user_id = $this->getChatId($data);
+        // если удалять нельзя
+        if ($basket['product_count'] == 1 && !$param[1]) {
+            // предлагаем пользователю удалить товар
+            $text = "Просто удалите товар";
+        } else {
+            // меняем количество товара
+            $count = (!$param[1]) ? $basket['product_count'] - 1 : $basket['product_count'] + 1;
+            // сохраняем
+            $up_product = $this->pdo->prepare("UPDATE bot_shop_basket SET product_count = :p_count WHERE id = :id");
+            if ($up_product->execute(['p_count' => $count, 'id' => $param[2]])) {
+                // получаем все из корзины пользователя
+                $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+                $check->execute(['user_id' => $user_id]);
+                $basketCount = $check->rowCount();
+                // достаем модель продукта
+                $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+                $model_product->execute(['id' => $product_id]);
+                // получаем полную сумму
+                $sum = $this->totalSumOrder($user_id);
+                // готовим массив для кнопок корзины
+                $item['id'] = $param[2];
+                $item['count'] = $count;
+                $item['price'] = $model_product->fetch()['price'];
+                // получаем кнопки
+                $buttons = $this->drawBasketButton(
+                    $param[3],
+                    $basketCount,
+                    $item,
+                    $this->totalSumOrder($user_id));
+                // меняем клавиатуру
+                $this->botApiQuery("editMessageReplyMarkup", [
+                    'chat_id' => $user_id,
+                    'message_id' => $data['message']['message_id'],
+                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
+                ]);
+                // пишем уведомление
+                $text = ($param[1]) ? "Количество увеличено" : "Количество уменьшено";
+            } else {
+         $text = "Произошла ошибка";
+            }
+        }
+        // выводим уведомление
+        $this->notice($data['id'], $text);
+    }
+
+
     /** Удаление товара из корзины
      * @param $data
      */
@@ -1821,15 +2747,9 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
             // если в корзине что-то есть
             if ($basketCount > 0) {
                 // вычисляем бегин
-                if ($param[2] == 0) {
-                    $num = 0;
-                } elseif ($basketCount == $param[2]) {
-                    $num = $param[2] - 1;
-                } else {
-                    $num = $param[2];
-                }
                 // выводим следующий
-                $this->viewItemBasket($this->getChatId($data), $num, $data['message']['message_id']);
+	$this->showBasketBeginNew($user_id,$data,1);
+             //   $this->viewItemBasket($this->getChatId($data), $num, $data['message']['message_id']);
             } else {
                 // если в корзине пусто
                 $text_ = "<b>В вашей корзине не осталось товаров</b>\nПерейдите в /start для начала.";
@@ -1851,6 +2771,17 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
     /** Начало оформления покупки
      * @param $data
      */
+   private function showCat($data)
+    {
+        $user_id = $this->getChatId($data);
+        if ($this->setActionUser("step_1_phone", $user_id)) {
+            // Если удалось записать действие пользователю то отправляем ему запрос на ввод телефона
+            $this->insertPhone($user_id, $data);
+        } else {
+            $this->notice($data['id'], "Ошибка");
+        }
+    }
+
     private function setOrder($data)
     {
         $user_id = $this->getChatId($data);
@@ -1892,7 +2823,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
     {
         $user_id = $this->getChatId($data);
         // проверяем телефон
-        if (preg_match("/^\+[0-9]{9,14}$/i", $text)) {
+        if (preg_match("/^\[+][0-9]{10,14}$/i", $text)) {
             if ($this->setActionUser("step_2_adress", $user_id)) {
                 if ($this->setParamUser('phone', $text, $user_id)) {
                     $text_ = "<b>Оформление заказа</b>\n\n";
@@ -1916,6 +2847,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
             'parse_mode' => 'html',
         ]);
     }
+
 
     /** Сохраняем адрес
      * @param $text
@@ -2083,7 +3015,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
             $orderProduct = $this->pdo->prepare("SELECT * FROM bot_shop_order_product WHERE parent_id = :parent_id");
             $orderProduct->execute(['parent_id' => $orderRaw['id']]);
             // итоговую сумму определяем как ноль
-            $total = 0.00;
+            $total = 0;
             $goods = "";
 
             // перебираем массив
@@ -2407,6 +3339,8 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
      */
     public function buildKeyboardButton($text, $request_contact = false, $request_location = false)
     {
+
+
         $replyMarkup = [
             'text' => $text,
             'request_contact' => $request_contact,
@@ -2463,6 +3397,7 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
     }
 
 */
+
 
  private function sendVideo($user_id)
     {
@@ -2542,7 +3477,111 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
      * @param array $fields
      * @return mixed
      */
-    private function botApiQuery($method, $fields = array())
+
+
+  private function getTypeCommand($data)
+    {
+        // определяем id пользователя для уведомления
+        $chat_id = $data['message']['reply_to_message']['forward_from']['id'];
+        // если текст
+        if (array_key_exists('text', $data['message'])) {
+            // готовим данные
+            $dataSend = array(
+                'text' => $data['message']['text'],
+            );
+            // отправляем - передаем нужный метод
+            $this->requestToTelegram($dataSend, $chat_id, "sendMessage");
+        } elseif (array_key_exists('sticker', $data['message'])) {
+            $dataSend = array(
+                'sticker' => $data['message']['sticker']['file_id'],
+            );
+            $this->requestToTelegram($dataSend, $chat_id, "sendSticker");
+        } elseif (array_key_exists('document', $data['message'])) {
+            $dataSend = array(
+                'document' => $data['message']['document']['file_id'],
+                'caption' => $data['message']['caption'],
+            );
+            $this->requestToTelegram($dataSend, $chat_id, "sendDocument");
+        } elseif (array_key_exists('photo', $data['message'])) {
+            // картинки Телеграм ресайзит и предлагает разные размеры, мы берем самый последний вариант
+            // так как он самый большой - то есть оригинал
+            $img_num = count($data['message']['photo']) - 1;
+            $dataSend = array(
+                'photo' => $data['message']['photo'][$img_num]['file_id'],
+                'caption' => $data['message']['caption'],
+            );
+            $this->requestToTelegram($dataSend, $chat_id, "sendPhoto");
+        } elseif (array_key_exists('video', $data['message'])) {
+            $dataSend = array(
+                'video' => $data['message']['video']['file_id'],
+                'caption' => $data['message']['caption'],
+            );
+            $this->requestToTelegram($dataSend, $chat_id, "sendVideo");
+        } else {
+            $this->requestToTelegram(array("text" => "Тип передаваемого сообщения не поддерживается"), $chat_id, "sendMessage");
+        }
+    } 
+   
+    private function requestToTelegram($data, $chat_id, $type)
+    {
+        $result = null;
+        $data['chat_id'] = $chat_id;
+
+        if (is_array($data)) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $this->apiUrl . $this->botToken . '/' . $type);
+            curl_setopt($ch, CURLOPT_POST, count($data));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            $result = curl_exec($ch);
+            curl_close($ch);
+        }
+        return $result;
+    }
+
+    private function isBot($data) {
+        return ($data['message']['reply_to_message']['from']['is_bot'] == 1 
+ && !array_key_exists('forward_from', $data['message']['reply_to_message']));
+    }
+
+    /** проверяем на Reply
+     * @param $data
+     * @return bool
+     */
+    private function isReply($data) {
+        return array_key_exists('reply_to_message', $data['message']) ? true : false;
+    }
+
+
+private function feedBack($data) {
+$chat_id = $this->getChatId($data);	
+	if($this->isAdmin($chat_id))  {
+                if($this->isReply($data)) {
+                    // если ответ самому себе
+                    if($this->isAdmin($data['message']['reply_to_message']['from']['id'])) {
+                        $this->requestToTelegram(array("text" => "Вы ответили сами себе."), $this->admin, "sendMessage");
+                    } elseif($this->isBot($data)) {
+                        // если ответ боту
+                        $this->requestToTelegram(array("text" => "Вы ответили Боту."), $this->admin, "sendMessage");
+                    } else {
+                        // все нормально отправляем на обработку
+                        $this->getTypeCommand($data);
+                    }
+                } else {
+                    // нажать кнопку ответить
+                    $this->requestToTelegram(array("text" => "ya tut"), $this->admin, "sendMessage");
+                }
+            } else {
+                // Если этонаписал пользователь то перенаправляем админу
+                $dataSend = array(
+                    'from_chat_id' => $chat_id,
+                    'message_id' => $data['message']['message_id'],
+                );
+                $this->requestToTelegram($dataSend, $this->admin, "forwardMessage");
+            }
+
+}
+
+	 private function botApiQuery($method, $fields = array())
     {
         $ch = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
         curl_setopt_array($ch, array(
