@@ -16,10 +16,9 @@ $newShop->init();
 class ShopBot
 {
     // первичные данные
- private $token = "5102679784:AAFyTO7VueXRnzCr_BXCYMtORE_woRmdBig";
-
-//    private $token = "5104085784:AAEiwPaUWQfQ9dPdWuz8Lqlfl1VCR5NbP64";
-    private $admin = "866537385"; // Ваш id в ТЕЛеГРАМ
+    private $token = "5104085784:AAEiwPaUWQfQ9dPdWuz8Lqlfl1VCR5NbP64";
+//    private $admin = "866537385"; // Ваш id в ТЕЛеГРАМ
+    private $admin = "-554738564";
     private $helloText = "Привет, ";
     private $img_path = "img"; // путь до директории с картинками относительно этого файла
 
@@ -77,6 +76,7 @@ class ShopBot
             // дастаем действие админа из базы
             $action = $this->getAdminAction();
             $actionUser = $this->getUserAction($chat_id);
+            $feedUser = $this->getUserFeed($chat_id);
 
             // текстовые данные
             if (array_key_exists("text", $data['message'])) {
@@ -102,19 +102,27 @@ class ShopBot
 		} elseif ($text == "🛒 Корзина") {
                     // просмотр заказов для пользователя
                     $this->showBasket($data);
+		} elseif ($text == "💬 О нас") {
+ 		    $this->oNas($chat_id,$data);
                 } elseif ($text == "💦 Вода") {
                     // просмотр заказов для пользователя
                     $this->goshowBasket($data,'2');
-
-                } elseif ($text == "/lc") {
+		} elseif ($text == "❌ Закрыть чат") {
+			  $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+			$this->setFeedUser(0, $chat_id);
+                } elseif ($text == "📝 Мои заказы") {
                     // просмотр заказов для пользователя
                     $this->userLc($chat_id);
-	        } elseif ($text == "/kp"){
-                        $this->feedBack($data);
+	        } elseif ($text == "👩‍💻 Связаться с менеджером"){
+                        $this->goChat($data);
 		} elseif ($text == "Мне понятно, где находится кнопка «Меню кнопок»") {
                     $this->showMenu($chat_id,$data,"Отлично! Приятного пользования!");
 		} elseif ($text == "📋 Меню") {
  		    $this->goMenu($chat_id,$data);
+                } elseif ($text == "/menu") {
+			$this->setFeedUser(0, $chat_id);
+
+	  $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
 		} elseif ($text == "📋 Вернуться в меню") {
 		   $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
 
@@ -123,11 +131,16 @@ class ShopBot
                     if ($action == "addcategory" && $this->isAdmin($chat_id)) {
                         // если ждем данные для добавления категории
                         $this->adderCategory($text);
+		   } elseif (preg_match("~^feedback~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_1 - название
+			$this->feedBack($data);
+
                     } elseif (preg_match("~^addproduct_1_~", $action) && $this->isAdmin($chat_id)) {
                         // если ждем данные для добавления товара step_1 - название
                         $param = explode("_", $action);
                         // отправляем на добавление описания
                         $this->addProductName($param['2'], $text);
+
                     } elseif (preg_match("~^addproduct_2_~", $action) && $this->isAdmin($chat_id)) {
                         // если ждем данные для добавления товара step_2 - описание
                         $param = explode("_", $action);
@@ -148,6 +161,9 @@ class ShopBot
                         $param = explode("_", $action);
                         // отправляем данные на редактирование контактов
                         $this->rederContact($param[1], $text);
+ 		   } elseif (preg_match("~^1$~", $feedUser)) {
+			 $this->feedBack($data);
+
                     } elseif (preg_match("~^step_1_phone$~", $actionUser)) {
                         // если ждем данные для добавления телефона
                         $this->savePhoneUser($text, $data);
@@ -171,14 +187,37 @@ class ShopBot
                     $file_id = end($data['message']['photo'])['file_id'];
                     // отправляем на добавление описания
                     $this->addProductPhoto($param['2'], $param['3'], $file_id);
-                } else { // если не ждем картинок то предупереждение
+
+		} elseif (preg_match("~^1$~", $feedUser)) {
+                         $this->feedBack($data);
+    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спа");
+
+		} elseif (preg_match("~^feedback~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_1 - название
+                        $this->feedBack($data);
+    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Сп");
+
+
+ 		} else {
              //       $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
                 }
 	   } elseif (array_key_exists("contact", $data['message'])  && preg_match("~^gostart$~", $actionUser)) {
 		$this->saveReal($chat_id, $data);
 
-            } else { // другие данные - документы стикеры аудио ...
-              //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+            } else {
+		if (preg_match("~^1$~", $feedUser)) {
+                         $this->feedBack($data);
+    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спаси.");
+
+                } elseif (preg_match("~^feedback~", $action) && $this->isAdmin($chat_id)) {
+                        // если ждем данные для добавления товара step_1 - название
+                        $this->feedBack($data);
+    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасиб.");
+
+		} else {
+	 // другие данные - документы стикеры аудио ...
+                $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+			}
             }
         } // если пришел запрос на функцию обратного вызова
         elseif (array_key_exists("callback_query", $data)) {
@@ -1509,11 +1548,55 @@ $text_="Важно❗\n️При работе с ботом Вы можете з
           $buttons_first[3] = [
              $this->buildKeyboardButton("📝 Мои заказы"),
           ];
+$buttons_first[4] = [
+             $this->buildKeyboardButton("👩‍💻 Связаться с менеджером"),
+          ];
 
 
  $this->sendMessage($chat_id,$text,$buttons_first,true,true);
     }
 
+    private function oNas($chat_id, $data)
+    {
+	$text = "Вода Crocus - природная вода с добавлением магния!\n\n";
+	$text .="Ежедневно мы доставляем сотни бутылей 🙌🏻\n";
+        $text .="И нам крайне важно не просто доставить воду,\n а подарить хорошее настроение, эмоции 🙃\n";
+        $text .="А всё потому, что мы очень любим свою работу💜\n\n";
+        $text .="⏰Доставка с 10:00 до 21:00\n\n";
+        $text .="🏃Пункты самовывоза:\n";
+        $text .="📍г. Караганда, пр. Республики, 10, маг. Удача\n";
+        $text .="📍г. Караганда, ул. Кирпичная, 20, ТД Инструмент\n";
+        $text .="📍г. Абай, ул. Энгельса, 30, маг. Магнолия\n";
+        $text .="📍г. Абай, ул. Курчатова, 1, маг. ЧЁ\n";
+        $text .="📍г. Сарань, ул. Жамбыла, 112/1, TOO Prima LTD\n";
+  	$text .="📍г. Темиртау, 8-й мкрн, 27а, маг. Принцип\n\n";
+  	$text .="📞 8(707)300-20-30\n";
+	$text .="☎️8(7212)50-20-30\n";
+
+//      $text= "Отлично! Приятного пользования!";
+           $buttons_first[0] = [
+             $this->buildKeyboardButton("📋 Меню"),
+          ];
+
+        $buttons_first[1] = [
+            $this->buildKeyboardButton("🛒 Корзина"),
+            $this->buildKeyboardButton("🚘 Оформить заказ"),
+          ];
+
+         $buttons_first[2] = [
+             $this->buildKeyboardButton("💬 О нас"),
+          ];
+
+          $buttons_first[3] = [
+             $this->buildKeyboardButton("📝 Мои заказы"),
+          ];
+$buttons_first[4] = [
+             $this->buildKeyboardButton("👩💻 Связаться с менеджером"),
+          ];
+
+
+ $this->sendMessage($chat_id,$text,$buttons_first,true,true);
+    }
 
 
  private function goMenu($chat_id, $data,$text = NULL)
@@ -2786,9 +2869,9 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
     private function setOrder($data)
     {
         $user_id = $this->getChatId($data);
-        if ($this->setActionUser("step_1_phone", $user_id)) {
+        if ($this->setActionUser("step_1_del", $user_id)) {
             // Если удалось записать действие пользователю то отправляем ему запрос на ввод телефона
-            $this->insertPhone($user_id, $data);
+            $this->setDelivery($user_id, $data);
         } else {
             $this->notice($data['id'], "Ошибка");
         }
@@ -2812,6 +2895,28 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             'message_id' => $this->getMessageId($data),
             'parse_mode' => 'html',
         ]);
+        // глушим уведомление
+        $this->notice($data['id']);
+    }
+
+
+    private function insertPhone($user_id, $data)
+    {
+        $text = "Выберите удобный для вас способ доставки:\n\n";
+        // сумма заказа
+
+        $buttons_first[0] = [
+            $this->buildKeyboardButton("🚖 Доставка"),
+            $this->buildKeyboardButton("🏃 Самовывоз"),
+          ];
+
+          $buttons_first[1] = [
+             $this->buildKeyboardButton(" Мои заказы"),
+          ];
+
+
+ $this->sendMessage($chat_id,$text,$buttons_first,true,true);
+
         // глушим уведомление
         $this->notice($data['id']);
     }
@@ -3031,7 +3136,8 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
                 $goods .= " -- " . $product['name'] . " = " . $row['product_count'] . " " . $product['unit'] . " x " . $product['price'] . "\n";
             }
             // готовим данные
-            $text = "<b>Заказ от</b> " . $orderRaw['date'] . "\n";
+	    $text = "<b>Ваш заказ №: " .$orderRaw['id']."</b>\n\n";
+            $text .= "<b>Заказ от</b> " . $orderRaw['date'] . "\n";
             $text .= "<b>Сумма заказа:</b> " . $total . " тенге\n";
             $text .= "<b>Телефон:</b> " . $orderRaw['phone'] . "\n";
             $text .= "<b>Адрес:</b> " . $orderRaw['adress'] . "\n";
@@ -3141,6 +3247,17 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         return !empty($lastAction['action']) ? $lastAction['action'] : false;
     }
 
+   private function getUserFeed($user_id)
+    {
+        // достаем из базы
+        $last = $this->pdo->prepare("SELECT feedback FROM bot_shop_profile WHERE user_id = :user_id");
+        $last->execute(['user_id' => $user_id]);
+        // преобразуем строку в массив
+        $lastAction = $last->fetch();
+        // если есть значение то возвращаем его иначе false
+        return !empty($lastAction['feedback']) ? $lastAction['feedback'] : false;
+    }
+
     /** Записываем действие пользователя
      * @param $action
      * @return mixed
@@ -3151,6 +3268,14 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         $insertSql = $this->pdo->prepare("UPDATE bot_shop_profile SET action = :action WHERE user_id = :user_id");
         // возвращаем результат
         return $insertSql->execute(['action' => $action, 'user_id' => $user_id]);
+    }
+
+   private function setFeedUser($feedback, $user_id)
+    {
+        // готовим запрос
+        $insertSql = $this->pdo->prepare("UPDATE bot_shop_profile SET feedback = :feedback WHERE user_id = :user_id");
+        // возвращаем результат
+        return $insertSql->execute(['feedback' => $feedback, 'user_id' => $user_id]);
     }
 
     /** Записываем действие админа
@@ -3480,10 +3605,13 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
      */
 
 
-  private function getTypeCommand($data)
+    private function getTypeCommand($data,$chat_id =NULL)
     {
+	if(!isset($chat_id)){
+
         // определяем id пользователя для уведомления
         $chat_id = $data['message']['reply_to_message']['forward_from']['id'];
+       }
         // если текст
         if (array_key_exists('text', $data['message'])) {
             // готовим данные
@@ -3494,9 +3622,10 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             );
             // отправляем - передаем нужный метод
 	  $this->botApiQuery("sendMessage",$dataSend);
+
         } elseif (array_key_exists('sticker', $data['message'])) {
             $dataSend = array(
-                'sticker' => $data['message']['sticker']['file_id'],
+                'sticker' => $data['message']['sticker'],
 		'chat_id' => $chat_id ,
 
             );
@@ -3511,17 +3640,42 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             );
 	   $this->botApiQuery("sendDocument",$dataSend);
 
+	 } elseif (array_key_exists('animation', $data['message'])) {
+            $dataSend = array(
+                'animation' => $data['message']['animation']['file_id'],
+                'chat_id' => $chat_id ,
+
+            );
+           $this->botApiQuery("sendAnimation",$dataSend);
+	
+	   } elseif (array_key_exists('voice', $data['message'])) {
+            $dataSend = array(
+                'voice' => $data['message']['voice']['file_id'],
+                'caption' => $data['message']['caption'],
+                'chat_id' => $chat_id ,
+
+            );
+           $this->botApiQuery("sendVoice",$dataSend);
+
         } elseif (array_key_exists('photo', $data['message'])) {
             // картинки Телеграм ресайзит и предлагает разные размеры, мы берем самый последний вариант
             // так как он самый большой - то есть оригинал
             $img_num = count($data['message']['photo']) - 1;
             $dataSend = array(
                 'photo' => $data['message']['photo'][$img_num]['file_id'],
-                'caption' => $data['message']['caption'],
+		'caption' => $data['message']['caption'],
 		'chat_id' => $chat_id ,
 
             );
        	$this->botApiQuery("sendPhoto",$dataSend);
+
+	 } elseif (array_key_exists('audio', $data['message'])) {
+            $dataSend = array(
+                'audio' => $data['message']['video']['file_id'],
+                'caption' => $data['message']['caption'],
+                'chat_id' => $chat_id ,
+            );
+        $this->botApiQuery("sendAudio",$dataSend);
 
 	 } elseif (array_key_exists('video', $data['message'])) {
             $dataSend = array(
@@ -3540,9 +3694,9 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         $this->botApiQuery("sendMessage",$dataSend);
 
         }
-    } 
+     } 
    
-    private function isBot($data) {
+     private function isBot($data) {
         return ($data['message']['reply_to_message']['from']['is_bot'] == 1  && !array_key_exists('forward_from', $data['message']['reply_to_message']));
    			 }
 
@@ -3554,8 +3708,41 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         return array_key_exists('reply_to_message', $data['message']) ? true : false;
     }
 
-	private function feedBack($data) {
+    private function goChat($data)
+    {	
+
+
+        $user_id = $this->getChatId($data);
+        if ($this->setFeedUser(1, $user_id)) {
+            // Если удалось записать действие пользователю то отправляем ему запрос на ввод телефона
+            $this->inChat($user_id, $data);
+        } else {
+            $this->notice($data['id'], "Ошибка");
+        }
+    }
+
+
+    private function inChat($user_id, $data)
+    {
+   	$text= "Чтобы выйти из чата обратной связи, нажмите на кнопку Закрыть чат\n\n";
+
+	   $text .= "Напишите ваше сообщение:";
+           $buttons_first[0] = [
+             $this->buildKeyboardButton("❌ Закрыть чат"),
+          ];
+
+   $this->sendMessage($user_id,$text,$buttons_first,true,true);
+
+   }
+
+
+
+
+    private function feedBack($data) 
+    {
+
 	$chat_id = $this->getChatId($data);	
+
 	if($this->isAdmin($chat_id))  {
                 if($this->isReply($data)) {
                     // если ответ самому себе
@@ -3575,8 +3762,9 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
                            $this->botApiQuery("sendMessage",$dataSend);
 
                     } else {
-                        // все нормально отправляем на обработку
-                        $this->getTypeCommand($data);
+        //                // все нормально отправляем на обработку
+                    $this->getTypeCommand($data);
+		//	$this->setActionAdmin("");
                     }
                 } else {
                     // нажать кнопку ответить
@@ -3589,13 +3777,20 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
 
                 }
             } else {
+
                 // Если этонаписал пользователь то перенаправляем админу
                 $dataSend = [
-		    'chat_id' =>"-554738564" ,
+		   // 'chat_id' =>"-554738564" ,
+		'chat_id' => $this->admin,
+
                     'from_chat_id' => $chat_id,
                     'message_id' => $data['message']['message_id'],
                 ];
+
                 $this->botApiQuery("forwardMessage",$dataSend);
+		   $this->setActionAdmin("feedback");
+	//	$this->requestToTelegram("forwardMessage",$dataSend);
+
             }
 
 	}
@@ -3611,6 +3806,8 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
 		$method="sendMessage";
 		return $this->botApiQuery($method, $data_send);
     }
+
+
 
 	 private function botApiQuery($method, $fields = array())
     {

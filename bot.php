@@ -1,4 +1,3 @@
-y
 <?php
 //ini_set('error_reporting', E_ALL);
 //ini_set('display_errors', 1);
@@ -18,6 +17,8 @@ class ShopBot
 {
     // первичные данные
     private $token = "5104085784:AAEiwPaUWQfQ9dPdWuz8Lqlfl1VCR5NbP64";
+
+    //private $token = "5102679784:AAFyTO7VueXRnzCr_BXCYMtORE_woRmdBig";
 //    private $admin = "866537385"; // Ваш id в ТЕЛеГРАМ
     private $admin = "-554738564";
     private $helloText = "Привет, ";
@@ -87,7 +88,7 @@ class ShopBot
                     $this->gostart($chat_id, $data);
                 } elseif ($text == "/admin" && $this->isAdmin($chat_id)) {
                     // выводим страницу только админу
-                    $this->adminPage();
+                    $this->adminPage($chat_id);
                 } elseif ($text == "/admincategory" && $this->isAdmin($chat_id)) {
                     // Страница админ категорий
                     $this->adminCategory();
@@ -100,12 +101,19 @@ class ShopBot
                 } elseif ($text == "/orders" && $this->isAdmin($chat_id)) {
                     // просмотр заказов
                     $this->showOrders();
+		 } elseif ($text == "🚘 Оформить заказ") {
+			  $this->setOrder($data);
 		} elseif ($text == "🛒 Корзина") {
                     // просмотр заказов для пользователя
                     $this->showBasket($data);
+		} elseif ($text == "💬 О нас") {
+ 		    $this->oNas($chat_id,$data);
                 } elseif ($text == "💦 Вода") {
                     // просмотр заказов для пользователя
                     $this->goshowBasket($data,'2');
+		} elseif ($text == "🍼 Тара") {
+		    $this->goshowBasket($data,'8');
+
 		} elseif ($text == "❌ Закрыть чат") {
 			  $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
 			$this->setFeedUser(0, $chat_id);
@@ -118,13 +126,15 @@ class ShopBot
                     $this->showMenu($chat_id,$data,"Отлично! Приятного пользования!");
 		} elseif ($text == "📋 Меню") {
  		    $this->goMenu($chat_id,$data);
-                } elseif ($text == "/menu") {
+               } elseif ($text == "❌ Отменить заказ") {
+			$this->goBackmenu($data);
+		} elseif ($text == "/menu") {
 			$this->setFeedUser(0, $chat_id);
 
-	  $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+ 		    $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
 		} elseif ($text == "📋 Вернуться в меню") {
-		   $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
-
+		    $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+		    $this->setFeedUser(0, $chat_id);
                 } else { // другие текстовые сообщения
                     // смотрим куда отправить данные
                     if ($action == "addcategory" && $this->isAdmin($chat_id)) {
@@ -163,18 +173,24 @@ class ShopBot
  		   } elseif (preg_match("~^1$~", $feedUser)) {
 			 $this->feedBack($data);
 
-                    } elseif (preg_match("~^step_1_phone$~", $actionUser)) {
+                    } elseif (preg_match("~^step_1_del$~", $actionUser)) {
                         // если ждем данные для добавления телефона
-                        $this->savePhoneUser($text, $data);
+                        $this->saveDelUser($text, $data);
 		    } elseif (preg_match("~^gostart$~", $actionUser)) {
                         // если ждем данные для добавления телефона
                         $this->sendIdent($chat_id, $data);
-
+		    } elseif (preg_match("~^step_3_phone$~", $actionUser)) {
+                        // если ждем данные для добавления адреса
+                        $this->savePhoneUser($text, $data);
                     } elseif (preg_match("~^step_2_adress$~", $actionUser)) {
                         // если ждем данные для добавления адреса
                         $this->saveAdressUser($text, $data);
+		   } elseif (preg_match("~^step_4_ready$~", $actionUser)) {
+                        // если ждем данные для добавления адреса
+                        $this->goSetOrder($text, $data);
                     } else { // если не ждем никаких данных
                         $this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+
                     }
                 }
             } elseif (array_key_exists("photo", $data['message'])) {
@@ -189,16 +205,16 @@ class ShopBot
 
 		} elseif (preg_match("~^1$~", $feedUser)) {
                          $this->feedBack($data);
-    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спа");
+//    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спа");
 
 		} elseif (preg_match("~^feedback~", $action) && $this->isAdmin($chat_id)) {
                         // если ждем данные для добавления товара step_1 - название
                         $this->feedBack($data);
-    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Сп");
+  // $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Сп");
 
 
  		} else {
-             //       $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+                    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
                 }
 	   } elseif (array_key_exists("contact", $data['message'])  && preg_match("~^gostart$~", $actionUser)) {
 		$this->saveReal($chat_id, $data);
@@ -206,16 +222,16 @@ class ShopBot
             } else {
 		if (preg_match("~^1$~", $feedUser)) {
                          $this->feedBack($data);
-    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спаси.");
+    //$this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спаси.");
 
                 } elseif (preg_match("~^feedback~", $action) && $this->isAdmin($chat_id)) {
                         // если ждем данные для добавления товара step_1 - название
                         $this->feedBack($data);
-    $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасиб.");
+    //$this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасиб.");
 
 		} else {
 	 // другие данные - документы стикеры аудио ...
-                $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+//               $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
 			}
             }
         } // если пришел запрос на функцию обратного вызова
@@ -229,7 +245,7 @@ class ShopBot
         } // Здесь пришли пока не нужные нам форматы
         else {
             // вернем текст с ошибкой
-          //  $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
+//            $this->sendMessage($chat_id, "Нам пока не нужны эти данные. Спасибо.");
         }
         return true;
     }
@@ -241,6 +257,13 @@ class ShopBot
      * @param $id
      * @param $text
      */
+  private function goBackmenu($data)
+     {
+	 $chat_id = $this->getChatId($data);
+	$this->showMenu($chat_id,$data,"Чат-бот службы доставки Crocus");
+
+         @$this->setActionUser("", $chat_id);
+    }
 
      private function goStart($chat_id, $data)
      {
@@ -263,11 +286,9 @@ class ShopBot
  	 @$this->setActionUser("gostart", $chat_id);
 	}else{
 		if(strlen($user->fetch()['realphone']) > 10){
-	
 		@$this->setActionUser("start", $chat_id);
 		$this->startBot($chat_id, $data);
 	         } else{ 
-	
       $text="Для работы с ботом необходимо отправить контакт\nНажмите на кнопку «Отправть контакт»";
 
         $buttons_[0] = [
@@ -279,7 +300,6 @@ class ShopBot
  	}
     }
 
-    
     private function sendIdent($chat_id, $data)
     {
 	if(array_key_exists("contact", $data['message'])) {
@@ -1373,12 +1393,12 @@ class ShopBot
     /** Страница админа
      *
      */
-    private function adminPage()
+    private function adminPage($chat_id)
     {
         // готовим
         $text = "Администрирование\n   /admincategory - Категории\n   /orders - заказы";
         // выводим
-        $this->sendMessage($this->admin, $text);
+        $this->sendMessage($chat_id, $text);
     }
 
     /**
@@ -1467,12 +1487,11 @@ class ShopBot
      */
     private function startBot($chat_id, $data)
     { 
-	
         // достаем пользователя из базы
         $user = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
         $user->execute(['user_id' => $chat_id]);
 
-        // если такого пользователя нет в базе то пишем его туда
+        // /если такого пользователя нет в базе то пишем его туда
         if ($user->rowCount() == 0) {
             // добавляем пользователя
             $newUser = $this->pdo->prepare("INSERT INTO bot_shop_profile SET user_id = :user_id, first_name = :first_name, last_name = :last_name, phone = :phone, adress = :adress, action = 'start'");
@@ -1484,6 +1503,11 @@ class ShopBot
                 'adress' => '',
             ]);
         } else {
+	  $update = $this->pdo->prepare("UPDATE bot_shop_profile SET first_name = :first_name, last_name = :last_name  WHERE user_id = :user_id");
+        // если обновили то выводим контакты
+         $update->execute(['user_id' => $chat_id, 'first_name' =>$data['message']['chat']['first_name'], 'last_name' => $data['message']['chat']['last_name'],]);
+            // очищаем действия админа
+            // выводим страницу контактов
             // если пользователь есть то меняем ему действие
             @$this->setActionUser("start", $chat_id);
         }
@@ -1555,6 +1579,25 @@ $buttons_first[4] = [
  $this->sendMessage($chat_id,$text,$buttons_first,true,true);
     }
 
+    private function oNas($chat_id, $data)
+    {
+	$text = "<b>Вода Crocus</b> - природная вода с добавлением магния!\n\n";
+	$text .="Ежедневно мы доставляем сотни бутылей 🙌🏻\n";
+        $text .="И нам крайне важно не просто доставить воду,\n а подарить хорошее настроение, эмоции 🙃\n";
+        $text .="А всё потому, что мы очень любим свою работу💜\n\n";
+        $text .="⏰Доставка с 10:00 до 21:00 \n😎Без выходных \n\n";
+        $text .="🏃Пункты самовывоза:\n";
+        $text .="📍г. Караганда, пр. Республики, 10, маг. Удача\n";
+        $text .="📍г. Караганда, ул. Кирпичная, 20, ТД Инструмент\n";
+        $text .="📍г. Абай, ул. Энгельса, 30, маг. Магнолия\n";
+        $text .="📍г. Абай, ул. Курчатова, 1, маг. ЧЁ\n";
+        $text .="📍г. Сарань, ул. Жамбыла, 112/1, TOO Prima LTD\n";
+  	$text .="📍г. Темиртау, 8-й мкрн, 27а, маг. Принцип\n\n";
+  	$text .="📞 8(707)300-20-30\n";
+	$text .="☎️ 8(7212)50-20-30\n";
+
+$this->showMenu($chat_id, $data, $text);
+    }
 
 
  private function goMenu($chat_id, $data,$text = NULL)
@@ -1639,33 +1682,33 @@ $buttons_first[4] = [
     }
 
 
-   private function BasketMes($data)
+  private function BasketMes($data)
     {
-	$param = explode("_", $data['data']);
+        $param = explode("_", $data['data']);
         // получаем данные
         $chat_id = $this->getChatId($data);
         // меняем дуйствие
         // готовим текст
 
         $text = "Укажите количество товара\n\n";
-	$text .=$param[3];
+        $text .=$param[3];
         // получаем категории из базы где категории не скрыты
-	$buttons=$this->showBasketButton($param[1],$param[2],$param[4]);
+        $buttons=$this->showBasketButton($param[1],$param[2],$param[4]);
 
-	 $data_send = [
+         $data_send = [
             'chat_id' => $chat_id,
             'text' => $text,
             'message_id' => $this->getMessageId($data),
             'parse_mode' => 'html',
         ];
 
-	if (isset($buttons)) {
+        if (isset($buttons)) {
             $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
         }
 
 
         // отправляем привет
-	$this->botApiQuery("editMessageText", $data_send);
+        $this->botApiQuery("editMessageText", $data_send);
 
         // уведомляем
   $this->notice($data['id'], "");
@@ -1793,6 +1836,12 @@ $buttons_first[4] = [
         $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
         $basket = $check->fetch();
 
+	$chec = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $chec->execute(['id' => $param[1]]);
+        $baske = $chec->fetch();
+
+	$text = "<b>".$baske['name']."</b>\n\n";
+	$text .= "Цена: ".$baske['price']." тг. \n\n";
         if ($check->rowCount() === 0) {
                 $count=1;
                 } else {
@@ -1800,7 +1849,7 @@ $buttons_first[4] = [
                 }
 
         // проверяем есть ли уже в корзине этот товар
-       $buttons = $this->drawBasketButton2($param[1],$count,$param[3]);
+       $buttons = $this->drawBasketButton2($param[1],$count);
 /*
 	        $fields = [
             'chat_id' => $chat_id,
@@ -1809,10 +1858,8 @@ $buttons_first[4] = [
         ];
         // отправляем на изменение сообщения
 */
-	if ($param[2] === 0){
-	$text = $param[3];
-	}else{
-	$text = $param[3]."Выберите количество товара";
+	if ($param[2] > 0){
+	$text = $text."Выберите количество товара";
 	}	
    $fields = [
                 'chat_id' => $chat_id,
@@ -1858,6 +1905,13 @@ $buttons_first[4] = [
         $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE product_id = :product_id AND user_id = :user_id");
         $check->execute(['product_id' => $param[1], 'user_id' => $chat_id]);
         // условие проверки
+	 $chec = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $chec->execute(['id' => $param[1]]);
+        $baske = $chec->fetch();
+
+        $text = "<b>".$baske['name']."</b>\n\n";
+        $text .= "Цена: ".$baske['price']." тг. \n\n";
+
         if ($check->rowCount() > 0) {
             // пишем количесвто в переменную
             $count = $param[2];
@@ -1887,14 +1941,16 @@ $buttons_first[4] = [
             }
         }
 
-$buttons[][] = $this->buildInlineKeyBoardButton('✅ Добавлено ' ,"showKlava_".$param[1]."_1_".$param[3]);
+
+$buttons[][] = $this->buildInlineKeyBoardButton('✅ Добавлено ' ,"showKlava_" . $param['1'] ."_1_0");
+
+
 $buttons[][] = $this->buildInlineKeyBoardButton('🚘 Оформить заказ ' , 'setOrder_0');
 
 $id=$param[1];
    $checks = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
         $checks->execute(['id' => $id]);
 
-$text = $param[3];
 $ku = $checks->fetch();
 
 $sum=$ku['price']*$count;
@@ -1961,6 +2017,7 @@ $text .="\nСумма: ".$sum." тг.";
   $this->showBasketBeginNew($chat_id, $data,1);
 
 }
+
     private function addBasket($data)
     {
         // 1 - product_id, 2 - category_id
@@ -2071,7 +2128,7 @@ $text .="\nСумма: ".$sum." тг.";
             $buttons = $array['buttons'];
         } else {
             // если в корзине пусто
-            $text = "У вас нет добавленных товаров в корзине.";
+            $text = "Ваша корзина пуста";
         }
         // готовим данные для отображения
         $data_send = [
@@ -2091,7 +2148,7 @@ $text .="\nСумма: ".$sum." тг.";
     }
 
 
-    private function showBasketBeginNew($user_id, $data,$type=NULL)
+ private function showBasketBeginNew($user_id, $data,$type=NULL)
     {
         // получаем все из корзины пользователя
         $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
@@ -2103,39 +2160,39 @@ $text .="\nСумма: ".$sum." тг.";
 
 
         $model_basket = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
-        $model_basket->execute(['user_id' => $user_id]);	
-	$text = "Ваш заказ\n\n";
+        $model_basket->execute(['user_id' => $user_id]);
+        $text = "Ваш заказ\n\n";
 
-        	while($basket = $model_basket->fetch()){
+                while($basket = $model_basket->fetch()){
         // достаем товар
-       		 $product_id = $basket['product_id'];
+                 $product_id = $basket['product_id'];
         // достаем модель продукта
-      		  $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
-      		  $model_product->execute(['id' => $product_id]);
+                  $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+                  $model_product->execute(['id' => $product_id]);
         // готовим массив для кнопок корзины
-		$lol= $model_product->fetch();
-  		  $count = $basket['product_count'];
-      		  $price = $lol['price'];
-	          $unit = $lol['unit'];
-		  $name = $lol['name'];
-		  $barl= $price*$count;
-		  $id= $basket['id'];
-	 $text .= $name."\n";	
-	 $text .= $count." ".$unit." x ".$price." = ".$barl." тг.\n\n";
+                $lol= $model_product->fetch();
+                  $count = $basket['product_count'];
+                  $price = $lol['price'];
+                  $unit = $lol['unit'];
+                  $name = $lol['name'];
+                  $barl= $price*$count;
+                  $id= $basket['id'];
+         $text .= $name."\n";
+         $text .= $count." ".$unit." x ".$price." = ".$barl." тг.\n\n";
 
 
 $buttons[][] = $this->buildInlineKeyBoardButton($name, 'BasketMes_'.$product_id."_".$count."_".$name."_".$id);
         // возвращаем результат
-		}
+                }
 
-	$sum = $this->totalSumOrder($user_id);
-	$text .="Итого: ".$sum." тг.";
+        $sum = $this->totalSumOrder($user_id);
+        $text .="Итого: ".$sum." тг.";
 
 $text .="\n\nВыберите товар, чтобы изменить количество ⤵️";
             // получаем данные для отрисовки корзины
         } else {
             // если в корзине пусто
-            $text = "У вас нет добавленных товаров в корзине.";
+            $text = "<b>Ваша корзина пуста</b>";
         }
         // готовим данные для отображения
         $data_send = [
@@ -2149,12 +2206,13 @@ $text .="\n\nВыберите товар, чтобы изменить колич
             $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
         }
         // отправляем сообщение
-	if(isset($type)){
+        if(isset($type)){
        $this->botApiQuery("editMessageText", $data_send);
-	}else{
-	$this->botApiQuery("sendMessage", $data_send);
-	}
+        }else{
+        $this->botApiQuery("sendMessage", $data_send);
+        }
     }
+
 
 
     private function showBasketBegin3($user_id, $data)
@@ -2216,7 +2274,12 @@ $text .="\n\nВыберите товар, чтобы изменить колич
             // получаем данные для отрисовки корзины
 $text = "<b>".$row['name']."</b>\n\n";
 $text .= "Цена: ".$row['price']." тг. \n\n";
-$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $row['id'] . '_' .$id."_".$text);
+
+//$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $row['id'] . "_0_" . $text);
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $row['id'] . "_1_0");
+
+//$buttons[][] = $this->buildInlineKeyBoardButton("9", "showKlava_8_0_". $text);
+
 
         // отправляем сообщение
      //   $this->botApiQuery("editMessageText", $data_send);
@@ -2252,7 +2315,7 @@ $buttons=array();
  //       $this->botApiQuery("sendMessage", $data_send);
 
 
- usleep(700000);
+ usleep(200000);
 		}
         } 
 
@@ -2356,14 +2419,21 @@ $buttons=array();
 
    $param = explode("_", $data['data']);
 	$chat_id = $this->getChatId($data);
+  $chec = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+        $chec->execute(['id' => $param[1]]);
+        $baske = $chec->fetch();
 
-$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить" , "showKlava_" . $param['1'] . "_0_". $param['2']);
+        $text = "<b>".$baske['name']."</b>\n\n";
+        $text .= "Цена: ".$baske['price']." тг. \n\n";
 
+
+
+$buttons[][] = $this->buildInlineKeyBoardButton("🔘 Добавить", "showKlava_" . $param['1'] ."_1_0");
 	$fields = [
             'chat_id' => $chat_id,
             'message_id' => $this->getMessageId($data),
  	    'parse_mode' => 'html',
-	    'caption' =>$param['2'],
+	    'caption' =>$text,
             'reply_markup' => $this->buildInlineKeyBoard($buttons),
         ];
 
@@ -2467,6 +2537,7 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
     }
 
 
+
  private function showBasketButton($item, $count,$text)
     {
 
@@ -2491,7 +2562,6 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         // возвращаем результат
         return $buttons;
     }
-
 
 
 
@@ -2766,7 +2836,7 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
     /** Удаление товара из корзины
      * @param $data
      */
-    private function basketRemoveProduct($data)
+   private function basketRemoveProduct($data)
     {
         // 1- id, 2- begin
         $param = explode("_", $data['data']);
@@ -2790,11 +2860,11 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             if ($basketCount > 0) {
                 // вычисляем бегин
                 // выводим следующий
-	$this->showBasketBeginNew($user_id,$data,1);
+        $this->showBasketBeginNew($user_id,$data,1);
              //   $this->viewItemBasket($this->getChatId($data), $num, $data['message']['message_id']);
             } else {
                 // если в корзине пусто
-                $text_ = "<b>В вашей корзине не осталось товаров</b>\nПерейдите в /start для начала.";
+                $text_ = "<b>Ваша корзина пуста</b>";
                 // изменяем сообщение
                 $this->botApiQuery("editMessageText", [
                     'chat_id' => $user_id,
@@ -2809,7 +2879,6 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         // глушим уведомление
         $this->notice($data['id'], $text);
     }
-
     /** Начало оформления покупки
      * @param $data
      */
@@ -2826,19 +2895,58 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
 
     private function setOrder($data)
     {
-        $user_id = $this->getChatId($data);
-        if ($this->setActionUser("step_1_phone", $user_id)) {
+	$user_id = $this->getChatId($data);
+
+	 $check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+            $check->execute(['user_id' => $user_id]);
+            $basketCount = $check->rowCount();
+            // если в корзине что-то есть
+            if ($basketCount > 0) {
+                // вычисляем бегин
+                // выводим следующий
+		 if ($this->setActionUser("step_1_del", $user_id)) {
             // Если удалось записать действие пользователю то отправляем ему запрос на ввод телефона
-            $this->insertPhone($user_id, $data);
-        } else {
-            $this->notice($data['id'], "Ошибка");
-        }
+           	  $this->setDel($user_id, $data);
+        	 } else {
+            	  $this->notice($data['id'], "Ошибка");
+        	 }
+             //   $this->viewItemBasket($this->getChatId($data), $num, $data['message']['message_id']);
+            } else {
+                // если в корзине пусто
+                $text_ = "Ваша корзина пуста";
+                // изменяем сообщение
+		$this->sendMessage($user_id,$text_);
+
+            }
+
+
     }
 
     /** Запрос на ввод телефона
      * @param $user_id
      * @param $data
      */
+
+ private function setDel($user_id, $data)
+    {
+        $text = "Выберите удобный для вас способ доставки:\n\n";
+        // сумма заказа
+
+        $buttons_first[0] = [
+            $this->buildKeyboardButton("🚖 Доставка"),
+            $this->buildKeyboardButton("🏃 Самовывоз"),
+          ];
+
+          $buttons_first[1] = [
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+          ];
+
+
+ $this->sendMessage($user_id,$text,$buttons_first,true,true);
+
+        // глушим уведомление
+    }
+
     private function insertPhone($user_id, $data)
     {
         $text = "<b>Оформление заказа</b>\n\n";
@@ -2861,36 +2969,326 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
      * @param $text
      * @param $data
      */
-    private function savePhoneUser($text, $data)
+ private function saveDelUser($text, $data)
     {
         $user_id = $this->getChatId($data);
         // проверяем телефон
-        if (preg_match("/^\[+][0-9]{10,14}$/i", $text)) {
+        if ($text == "🏃 Самовывоз") {
+
             if ($this->setActionUser("step_2_adress", $user_id)) {
+
+	                if ($this->setParamUser('del', 0, $user_id)) {
+	                    $text_ = "Через сколько планируете забрать?\nМожете написать произвольный текст или выбрать из предложенных вариантов";
+		 $buttons_first[] = [ 
+$this->buildKeyboardButton("30 минут"),
+$this->buildKeyboardButton("Через час"),
+
+];
+		$buttons_first[] = [
+
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+		];
+
+	                } else {
+	                    $text_ = "Ошибка попробуйте снова /start";
+        	        }
+            } else {
+                $text_ = "Ошибка попробуйте еще раз";
+            }
+
+        } elseif ($text == "🚖 Доставка") {
+
+           if ($this->setActionUser("step_2_adress", $user_id)) {
+			if ($this->setParamUser('del', 1, $user_id)) {
+	                    $text_ = "Куда доставить заказ?\nПожалуйста, напишите адрес доставки вручную";
+ $buttons_first[] = [
+
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+];
+
+	                } else {
+	                    $text_ = "Ошибка попробуйте снова /start";
+        	        }
+            } else {
+                $text_ = "Ошибка попробуйте еще раз";
+            }
+
+        } else {
+            $text_ = "Выберите удобный для вас способ доставки:👇\n\n";
+ $buttons_first[0] = [
+            $this->buildKeyboardButton("🚖 Доставка"),
+            $this->buildKeyboardButton("🏃 Самовывоз"),
+          ];
+
+          $buttons_first[1] = [
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+          ];
+
+        }
+
+	 $this->sendMessage($user_id,$text_,$buttons_first,true,true);
+
+    }
+
+     private function whatBasket($user_id)
+     {
+
+	$check = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+        $check->execute(['user_id' => $user_id]);
+        // количество в корзине
+        $basketCount = $check->rowCount();
+        // если в корзине что-то есть
+        if ($basketCount > 0) {
+
+        $model_basket = $this->pdo->prepare("SELECT * FROM bot_shop_basket WHERE user_id = :user_id");
+        $model_basket->execute(['user_id' => $user_id]);
+
+                while($basket = $model_basket->fetch()){
+        // достаем товар
+                 $product_id = $basket['product_id'];
+        // достаем модель продукта
+                  $model_product = $this->pdo->prepare("SELECT * FROM bot_shop_product WHERE id = :id");
+                  $model_product->execute(['id' => $product_id]);
+        // готовим массив для кнопок корзины
+                $lol= $model_product->fetch();
+                  $count = $basket['product_count'];
+                  $price = $lol['price'];
+                  $unit = $lol['unit'];
+                  $name = $lol['name'];
+                  $barl= $price*$count;
+                  $id= $basket['id'];
+         $text = $name."\n";
+         $text .= $count." x ".$price." = ".$barl." тг.\n\n";
+
+
+        // возвращаем результат
+                }
+
+        $sum = $this->totalSumOrder($user_id);
+        $text .="Итого: ".$sum." тг.";
+
+            // получаем данные для отрисовки корзины
+        } else {
+            // если в корзине пусто
+            $text = "Ваша корзина пуста";
+        }
+	 $data_send = [
+            'chat_id' => $user_id,
+            'text' => $text,
+            'parse_mode' => 'html',
+        ];
+	$buttons[][] = $this->buildInlineKeyBoardButton('✅ Подтвердить Заказ', 'setReady_0');
+         $buttons[][] = $this->buildInlineKeyBoardButton('❌ Отменить Заказ', 'setOut_0');
+
+        // проверяем наличие кнопок
+            $data_send['buttons'] = $buttons;
+
+	return $data_send;
+
+    }
+
+    private function savePhoneUser($text, $data)
+    {
+	  $user_id = $this->getChatId($data);
+
+	$phone = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
+        $phone->execute(['user_id' => $user_id]);
+        $phone = $phone->fetch();
+	$dataBas= $this->whatBasket($user_id);
+        // проверяем телефон
+	 if (preg_match("/^\+[0-9]{9,14}$/i", $text)) {
+
+            if ($this->setActionUser("step_4_ready", $user_id)) {
                 if ($this->setParamUser('phone', $text, $user_id)) {
-                    $text_ = "<b>Оформление заказа</b>\n\n";
+			$phone = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
+        		$phone->execute(['user_id' => $user_id]);
+        		$phone = $phone->fetch();
+                    $text_ = "Отлично! Осталось подтвердить заказ!\n\n";
                     // сумма заказа
-                    $text_ .= "Сумма заказа: " . $this->totalSumOrder($user_id) . " тенге";
+                    $text_ .= "📥 Ваш заказ\n\n";
+		    $text_ .= $dataBas['text']."\n\n";
+			if($phone['del'] > 0){
+			$del = "🚖 Доставка по адресу\nАдрес доставки: 📍".$phone['adress'];
+			}else {
+			$del = "🏃 Самовывоз";
+			$del .=" ".$phone['adress'];
+
+			}
+		    $text_ .="\n\nВаш номер:          📱".$phone['phone']."\n";
+		    $text_ .= "Тип доставки:     ".$del."\n";
+			  $buttons=$dataBas['buttons'];
+			$text__ ="Для того, чтобы подтвердить заказ, нажмите на кнопку:\n«✅ Подтвердить заказ»\nВ обратном же случае, нажмите на кнопку\n «❌ Отменить заказ»";
+			  $buttons_first[] = [
+                        $this->buildKeyboardButton("✅ Подтвердить Заказ"),
+                          ];
+
+
                     // телефон
-                    $text_ .= "\nТелефон: " . $text;
-                    $text_ .= "\n\nУкажите ваш адрес для доставки:";
                 } else {
                     $text_ = "Ошибка попробуйте снова /start";
                 }
             } else {
                 $text_ = "Ошибка попробуйте еще раз";
             }
-        } else {
-            $text_ = "Ошибка в веденных данных, попробуйте еще раз.\n\nУкажите свой телефон в формате +79001234567:";
+	}elseif (preg_match("/^[6-9][0-9]{10}$/i", $text)) {
+
+	 	if ($this->setActionUser("step_4_ready", $user_id)) {
+                	if ($this->setParamUser('phone', $text, $user_id)) {
+			 $phone = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
+                        $phone->execute(['user_id' => $user_id]);
+                        $phone = $phone->fetch();
+
+
+			$text_ = "Отлично! Осталось подтвердить заказ!\n\n";
+                    // сумма заказа
+	                    $text_ .= "📥 Ваш заказ\n\n";
+        	            $text_ .= $dataBas['text'];
+			  if($phone['del'] > 0){
+                        $del = "🚖 Доставка по адресу\nАдрес доставки: 📍".$phone['adress'];
+                        }else {
+                        $del = "🏃 Самовывоз";
+          		$del .=" ".$phone['adress'];
+		              }
+                    $text_ .="\n\nВаш номер:          📱".$phone['phone']."\n";
+                    $text_ .= "Тип доставки:     ".$del."\n";
+			$buttons=$dataBas['buttons'];
+               $text__ ="Для того, чтобы подтвердить заказ, нажмите на кнопку:\n«✅ Подтвердить заказ»\nВ обратном же случае, нажмите на кнопку\n «❌ Отменить заказ»";
+
+	 		$buttons_first[] = [
+        	     	$this->buildKeyboardButton("✅ Подтвердить Заказ"),
+        		  ];
+
+
+                	} else {
+                    	$text_ = "Ошибка попробуйте снова /start";
+                	}
+            	} else {
+                	$text_ = "Ошибка попробуйте еще раз";
+            	}
+
+
+	 }elseif ($text == "📱Использовать последний номер") {
+
+		$text=$phone['phone'];
+                if ($this->setActionUser("step_4_ready", $user_id)) {
+                        if ($this->setParamUser('phone', $text, $user_id)) {
+                        $text_ = "Отлично! Осталось подтвердить заказ!\n\n";
+                    // сумма заказа
+                            $text_ .= "📥 Ваш заказ\n\n";
+                            $text_ .= $dataBas['text'];
+                          if($phone['del'] > 0){
+                        $del = "🚖 Доставка по адресу\nАдрес доставки: 📍".$phone['adress'];
+                        }else {
+                        $del = "🏃 Самовывоз";
+                        $del .=" ".$phone['adress'];
+                              }
+                    $text_ .="\n\nВаш номер:          📱".$phone['phone']."\n";
+                    $text_ .= "Тип доставки:     ".$del."\n";
+                        $buttons=$dataBas['buttons'];
+               $text__ ="Для того, чтобы подтвердить заказ, нажмите на кнопку:\n«✅ Подтвердить заказ»\nВ обратном же случае, нажмите на кнопку\n «❌ Отменить заказ»";
+
+                        $buttons_first[] = [
+                        $this->buildKeyboardButton("✅ Подтвердить Заказ"),
+                          ];
+
+
+                        } else {
+                        $text_ = "Ошибка попробуйте снова /start";
+                        }
+                } else {
+                        $text_ = "Ошибка попробуйте еще раз";
+                }
+
+	 }elseif ($text == "✔️ Верно") {
+
+	                $text=$phone['realphone'];
+                if ($this->setActionUser("step_4_ready", $user_id)) {
+                        if ($this->setParamUser('phone', $text, $user_id)) {
+                        $text_ = "Отлично! Осталось подтвердить заказ!\n\n";
+                    // сумма заказа
+                            $text_ .= "📥 Ваш заказ\n\n";
+                            $text_ .= $dataBas['text'];
+                          if($phone['del'] > 0){
+                        $del = "🚖 Доставка по адресу\nАдрес доставки: 📍".$phone['adress'];
+                        }else {
+                        $del = "🏃 Самовывоз";
+                        $del .=" ".$phone['adress'];
+                              }
+                     $text_ .="\n\nВаш номер:          📱".$phone['realphone']."\n"; 
+		   $text_ .= "Тип доставки:     ".$del."\n";
+                        $buttons=$dataBas['buttons'];
+               $text__ ="Для того, чтобы подтвердить заказ, нажмите на кнопку:\n«✅ Подтвердить заказ»\nВ обратном же случае, нажмите на кнопку\n «❌ Отменить заказ»";
+
+                        $buttons_first[] = [
+                        $this->buildKeyboardButton("✅ Подтвердить Заказ"),
+                          ];
+
+
+                        } else {
+                        $text_ = "Ошибка попробуйте снова /start";
+                        }
+                } else {
+                        $text_ = "Ошибка попробуйте еще раз";
+                }
+
+
+
+
+	} else {
+            $text_ = "Напишите ваш номер.\n\n";
+	    $text__ = "Укажите свой телефон в формате +77001234567:";
         }
-        $this->botApiQuery("sendMessage", [
-            'chat_id' => $user_id,
-            'text' => $text_,
-            'parse_mode' => 'html',
-        ]);
+		
+	  $buttons_first[] = [
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+          ];
+
+
+	if(isset($buttons)){
+	   $this->sendMessage($user_id,$text_);	
+	} else {
+	   $this->sendMessage($user_id,$text_);
+	}
+	   $this->sendMessage($user_id,$text__,$buttons_first,true,true);
+
     }
 
 
+
+   private function goSetOrder($text, $data)
+    {
+ $user_id = $this->getChatId($data);
+
+	if($text =="✅ Подтвердить Заказ"){
+	$this->setReady($data);
+ 	$contact = $this->pdo->prepare("SELECT * FROM bot_shop_order  WHERE user_id = :user_id ORDER BY id DESC LIMIT 1");
+        // парсим в массив
+	$contact->execute(['user_id' => $user_id]);
+        $item = $contact->fetch();
+	$id =$item['id'];
+
+	$text_="✅ Заказ подтвержден!\n\n";
+	$text_.="Номер заказа: ".$id."\n\n";
+	$text_.="В ближайшее время наш оператор позвонит Вам для подтверждения заказа 📞";
+	$this->showMenu($user_id,$data,$text_);
+
+         @$this->setActionUser("", $user_id);
+
+	} else {
+
+   $text__ ="Для того, чтобы подтвердить заказ, нажмите на кнопку:\n«✅ Подтвердить заказ»\nВ обратном же случае, нажмите на кнопку\n «❌ Отменить заказ»";
+
+  $buttons_first[0] = [
+                        $this->buildKeyboardButton("✅ Подтвердить Заказ"),
+                          ];
+
+ $buttons_first[1] = [
+             $this->buildKeyboardButton("❌ Отменить заказ"),
+          ];
+    $this->sendMessage($user_id,$text__,$buttons_first,true,true);
+	
+	}
+    }
     /** Сохраняем адрес
      * @param $text
      * @param $data
@@ -2899,36 +3297,61 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
     {
         $user_id = $this->getChatId($data);
         // Достаем телефон
-        $phone = $this->pdo->prepare("SELECT phone FROM bot_shop_profile WHERE user_id = :user_id");
+        $phone = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
         $phone->execute(['user_id' => $user_id]);
+	$phone = $phone->fetch();
+	if(strlen($text) > 100 ){
+		$text_="Кажется у вас запала кнопка  \n";
+        	$text_.="Адрес не должен быть таким длинным 😅";
+	}else{
+        	if ($this->setActionUser("step_3_phone", $user_id)) {
+            		if ($this->setParamUser('adress', $text, $user_id)) {
 
-        if ($this->setActionUser("step_3_ready", $user_id)) {
-            if ($this->setParamUser('adress', $text, $user_id)) {
-                $text_ = "<b>Оформление заказа</b>\n\n";
-                // сумма заказа
-                $text_ .= "Сумма заказа: " . $this->totalSumOrder($user_id) . " тенге";
-                // телефон
-                $text_ .= "\nТелефон: " . $phone->fetch()['phone'];
-                $text_ .= "\nАдрес для доставки: " . $text;
-                $buttons[][] = $this->buildInlineKeyBoardButton('✔ Готово', 'setReady_0');
-            } else {
-                $text_ = "Ошибка попробуйте снова /start";
-            }
-        } else {
-            $text_ = "Ошибка попробуйте еще раз";
-        }
-        // готовим данные
-        $data_send = [
-            'chat_id' => $user_id,
-            'text' => $text_,
-            'parse_mode' => 'html',
-        ];
-        // если есть кнопки добавляем
-        if (is_array($buttons)) {
-            $data_send['reply_markup'] = $this->buildInlineKeyBoard($buttons);
-        }
-        // отправляем запрос
-        $this->botApiQuery("sendMessage", $data_send);
+				if(isset($phone['phone']) && strlen($phone['phone']) > 10){
+				$text_ = "Ваш последний номер телефона: ". $phone['phone'];
+
+				$buttons_first[0] = [
+                                $this->buildKeyboardButton("📱Использовать последний номер"),
+                                ];
+				 $buttons_first[1] = [
+                                $this->buildKeyboardButton("🖊 Изменить"),
+                                ];
+
+                                $buttons_first[2] = [
+			        $this->buildKeyboardButton("❌ Отменить заказ"),
+                                ];
+
+
+				} elseif(isset($phone['realphone'])) {
+			 	$text_ = "Ваш номер телефона: ". $phone['realphone'];
+
+				$buttons_first[0] = [
+                                $this->buildKeyboardButton("✔️ Верно"),
+				$this->buildKeyboardButton("🖊 Изменить"),
+                                ];
+
+				$buttons_first[1] = [
+			        $this->buildKeyboardButton("❌ Отменить заказ"),
+
+		                                ];
+
+
+				}
+
+            		} else {
+                		$text_ = "Ошибка попробуйте снова /start";
+            		}
+
+        	} else {
+            	$text_ = "Ошибка попробуйте еще раз";
+        	}
+	}
+		if (is_array($buttons_first)) {
+		$this->sendMessage($user_id,$text_,$buttons_first,true,true);
+
+        	} else {
+			$this->sendMessage($user_id,$text_);
+			}
     }
 
     /** Оформляем заказ
@@ -2947,12 +3370,14 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
         if ($basket->rowCount() > 0) {
             $userInfo = $user->fetch();
             // готовим данные для записи в таблицу заказов
-            $inOrder = $this->pdo->prepare("INSERT INTO bot_shop_order SET user_id = :user_id, date = NOW(), status = 0, name = :name, phone = :phone, adress = :adress");
+            $inOrder = $this->pdo->prepare("INSERT INTO bot_shop_order SET user_id = :user_id, date = NOW(), status = 0, name = :name, phone = :phone, adress = :adress, del = :del");
             if ($inOrder->execute([
                 'user_id' => $user_id,
                 'name' => trim($userInfo['first_name'] . " " . $userInfo['last_name']),
                 'phone' => $userInfo['phone'],
                 'adress' => $userInfo['adress'],
+		'del' => $userInfo['del'],
+
             ])) {
                 $parent_id = $this->pdo->lastInsertId();
                 // записываем товары
@@ -2967,9 +3392,13 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
                 $this->notice($data['id']);
                 $this->userLc($user_id, $data['message']['message_id']);
                 // уведомляем админа
+		$array = $this->drawOrder();
+
                 $this->botApiQuery("sendMessage", [
-                    'chat_id' => $this->admin,
-                    'text' => "Поступил новый заказ /orders"
+                    'chat_id' => "-554738564",
+                    'text' => $array['text'],
+		    'parse_mode' => 'html',
+
                 ]);
             } else {
                 $this->notice($data['id'], "Ошибка_", true);
@@ -3069,27 +3498,32 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
                 $sum = $product['price'] * $row['product_count'];
                 $total += $sum;
                 // складываем товары
-                $goods .= " -- " . $product['name'] . " = " . $row['product_count'] . " " . $product['unit'] . " x " . $product['price'] . "\n";
+                $goods .= "<b>". $product['name'] . "</b>\n" . $row['product_count'] . " " . $product['unit'] . " x " . $product['price'] . " тг.\n\n";
             }
             // готовим данные
-	    $text = "<b>Ваш заказ №: " .$orderRaw['id']."</b>\n\n";
-            $text .= "<b>Заказ от</b> " . $orderRaw['date'] . "\n";
-            $text .= "<b>Сумма заказа:</b> " . $total . " тенге\n";
+	    $text = "<b>Заказ №: " .$orderRaw['id']."</b>\n";
+            $text .= "Заказ от " . $orderRaw['date'] . "\n\n";
+
+	    $text .=$goods;   
+            $text .= "<b>Сумма заказа:</b> " . $total . " тенге\n\n";
             $text .= "<b>Телефон:</b> " . $orderRaw['phone'] . "\n";
+		   if($orderRaw['del'] > 0){
             $text .= "<b>Адрес:</b> " . $orderRaw['adress'] . "\n";
+		   }else {  $text.= "<b>Самовывоз</b>";
+		   }
 
             if (!$user_id) {
                 $user_data = $this->pdo->prepare("SELECT * FROM bot_shop_profile WHERE user_id = :user_id");
                 $user_data->execute(['user_id' => $orderRaw['user_id']]);
                 $user_data_raw = $user_data->fetch();
-                $text .= "<b>Пользователь:</b> " . trim($user_data_raw['first_name'] . " " . $user_data_raw['last_name']) . "\n";
+                $text .= "\n\n<b>Пользователь:</b> " . trim($user_data_raw['first_name'] . " " . $user_data_raw['last_name']) . "\n";
             }
 
             if ($orderRaw['type_pay']) {
                 $text .= "<b>Оплата:</b> наличными при получении\n";
             }
 
-            $text .= "<b>Товары</b>: \n" . $goods;
+           // $text .= "<b>Товары</b>: \n" . $goods;
 
             /********************************************/
 
@@ -3098,7 +3532,7 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             /********************************************/
 
             if (!$orderRaw['status']) {
-                if (!$orderRaw['type_pay'] && $user_id) {
+                if ($orderRaw['type_pay'] == 9 && $user_id) {
                     // готовим кнопку для перехода в Яндекс.Деньги
                     $url = $this->getUrl($total, $user_id, $orderRaw['id']);
                     $buttons[][] = $this->buildInlineKeyBoardButton('Оплатить через Kaspi', '', "https://kaspi.kz");
@@ -3125,8 +3559,8 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
                 $next = ($count == $begin + 1) ? 0 : $begin + 1;
                 // выводим навигацию
                 $buttons[] = [
-                    $this->buildInlineKeyBoardButton('<< Туда', 'orderGo_' . $prev . '_' . $user_id),
-                    $this->buildInlineKeyBoardButton('Сюда >>', 'orderGo_' . $next . '_' . $user_id),
+                    $this->buildInlineKeyBoardButton('⏪', 'orderGo_' . $prev . '_' . $user_id),
+                    $this->buildInlineKeyBoardButton('⏩', 'orderGo_' . $next . '_' . $user_id),
                 ];
             }
         } else {
@@ -3289,6 +3723,15 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
      */
     private function isAdmin($chat_id)
     {
+        // парсим в массив
+//	$stack = array("-554738564", "866537385");
+
+//	if (in_array($chat_id,$stack )){
+//	return true;
+//	} else {
+//	return false;	
+//	}
+
         // возвращаем true или fasle
         return $chat_id == $this->admin;
     }
@@ -3559,13 +4002,16 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
             // отправляем - передаем нужный метод
 	  $this->botApiQuery("sendMessage",$dataSend);
 
+
         } elseif (array_key_exists('sticker', $data['message'])) {
             $dataSend = array(
-                'sticker' => $data['message']['sticker'],
+		'sticker' => $data['message']['sticker']['file_id'],
 		'chat_id' => $chat_id ,
 
             );
 	  $this->botApiQuery("sendSticker",$dataSend);
+
+
 
         } elseif (array_key_exists('document', $data['message'])) {
             $dataSend = array(
@@ -3660,7 +4106,7 @@ $this->buildInlineKeyBoardButton($count, 'basketViewParam_' .$count.'_'.$item.'_
 
     private function inChat($user_id, $data)
     {
-   	$text= "Чтобы выйти из чата, нажмите на кнопку Закрыть чат\n\n";
+   	$text= "Чтобы выйти из чата обратной связи, нажмите на кнопку Закрыть чат\n\n";
 
 	   $text .= "Напишите ваше сообщение:";
            $buttons_first[0] = [
