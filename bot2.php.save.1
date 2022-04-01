@@ -173,10 +173,6 @@ class ShopBot
                         $param = explode("_", $action);
                         // отправляем данные на редактирование контактов
                         $this->rederContact($param[1], $text);
-		    } elseif (preg_match("~^text~", $action) && $this->isAdmin($chat_id)) {
-                        // если ждем данные для для редактирования контактов
-                        $this->inmaliText($data,$text);
-
  		   } elseif (preg_match("~^1$~", $feedUser)) {
 			 $this->feedBack($data);
 
@@ -1048,143 +1044,85 @@ class ShopBot
                 $this->botApiQuery("sendMessage", $fields);
    }
 
- private function malibu($data)
-  {
-	 $obj = $data['data'];
+
+private function malibu($data)
+    {
+$chat_id= $this->admin;
+  $obj = $data['data'];
         // разбиваем в массив
         $param = explode("_", $obj);
+	if($param[1] == "text"){
+        	if ($this->setActionAdmin( $param[1])) {
+		$this->maliText($data);
+		} else {
+		$this->sendMessage($this->admin, "Ошибка текст");
+		}
+	} elseif($param[1] == "pic"){
+	  if ($this->setActionAdmin( $param[1])) {
+		$this->sendMessage($this->admin, "Отправьте картинку");
 
+                } else {
+                $this->sendMessage($this->admin, "Ошибка картинка");
+                }
+        } elseif($param[1] == "textpic"){
+          if ($this->setActionAdmin("text")) {
+		$this->maliText($data,0);
+                } else {
+                $this->sendMessage($this->admin, "Ошибка текстP");
+                }
+        } elseif($param[1] == "vid"){
+          if ($this->setActionAdmin( $param[1])) {
+                $this->sendMessage($this->admin, "Отправьте видео");
 
-      if($param[1] == "text"){
+                } else {
+                $this->sendMessage($this->admin, "Ошибка видео");
+                }
+        } elseif($param[1] == "textvid"){
           if ($this->setActionAdmin( "text")) {
-                $this->maliText($data);
-                } else {
-                $this->sendMessage($this->admin, "Ошибка текст");
-                }
-      } elseif($param[1] == "pic"){
-          if ($this->setActionAdmin( "pic")) {
-		 $this->sendMessage($this->admin, "отправьте картинку");
-                } else {
-                $this->sendMessage($this->admin, "Ошибка текст");
-                }
-      } elseif($param[1] == "textpic"){
-          if ($this->setActionAdmin( "text")) {
-                $this->maliText($data,0);
-                } else {
-                $this->sendMessage($this->admin, "Ошибка текст");
-                }
-      } elseif($param[1] == "vid"){
-          if ($this->setActionAdmin( "vid")) {
-                $this->sendMessage($this->admin, "отправьте видео");
-
-                } else {
-                $this->sendMessage($this->admin, "Ошибка текст");
-                }
-
-      } elseif($param[1] == "textvid"){
-          if ($this->setActionAdmin( "text")) {
-                $this->maliText($data,1);
+ 		$this->maliText($data,1);
                 } else {
                 $this->sendMessage($this->admin, "Ошибка текст");
                 }
        } else {
-           $this->sendMessage($this->admin, "Что то пошло не так");
-       }
+	   $this->sendMessage($this->admin, "Что то пошло не так");
+	}
 
 
-  }
-          
+
+	  $insertSql = $this->pdo->prepare("INSERT INTO bot_shop_category SET name = :name, hide = 1");
+        // возвращаем результат
+        if ($insertSql->execute(['name' => $name])) {
+            // если добавили то удаляем действия админа
+            if (!$this->adminActionCancel()) {
+                $this->sendMessage($this->admin, "Категорию добавили, но не смогли удалить действия админа во временной таблице");
+            }
+            // выводим категории в любом случае
+            $this->adminCategory();
+        } else {
+            $this->sendMessage($this->admin, "Ошибка при добавлении категории");
+        }
+
+
+
+    }
+
 
   private function maliText($data,$type=NULL)
     {
 $chat_id= $this->admin;
     $text ="Напишите ваш текст";
-$mes = $this->getMessageId($data);
-$this->editMessageText($chat_id,$mes,$text);
- //$this->sendMessage($chat_id,$text);
+          ];
+ $this->sendMessage($chat_id,$text,$buttons_first,true,true);
 
     }
 
   private function inmaliText($data,$text)
     {
-        if(strlen($text) > 200){
-          $this->sendMessage($this->admin, "Слишком длинный текст");
-        } else {
-	$insertSql = $this->pdo->prepare("INSERT INTO mailing  SET caption = :caption, date = NOW(), user_id =:user_id");
-		 if ($insertSql->execute(['caption' => $text, 'user_id' =>$this->admin])) {
-		$this->goFinish($data);
-		 }
-        }
-    }
-
-
-
-	 private function goFinish($data,$type=NULL)
-    {
-	$buttons[] = [
-                $this->buildInlineKeyBoardButton("🔎 Просмотр", "finishPrev_0"),
-                        ];
-        $buttons[] = [
-
-                $this->buildInlineKeyBoardButton("🎉 Отправить рассылку", "goRass_0"),
-            ];
-
-	$text ="Все готово";
-                $fields = [
-                    'chat_id' => $this->admin,
-                    'text' => $text,
-                    'reply_markup' => $this->buildInlineKeyBoard($buttons),
-                    'parse_mode' => 'html',
-                ];
-	 $this->botApiQuery("sendMessage", $fields);	
-    }
-
-
-
-    private function finishPrev($data)
-    {
-	$text = "Ошибка тут пусто";
-	$a=0;
-	$item =$this->prepareFinish();
-	if($item['caption'] !== 0) {
-       $text = $item['caption'];
-	$a=1;
-	$buttons[] = [
-                $this->buildInlineKeyBoardButton("🎉 Отправить рассылку", "goRass_0"),
-
-            ];
-        $buttons[] = [
-                $this->buildInlineKeyBoardButton("<< Назад", "goBack_0"),
-            ];
-
-	}else{
-        $buttons =array();
-        }
-
-	$chat_id= $this->admin;
-	$mes = $this->getMessageId($data);
-	$this->editMessageText($chat_id,$mes,$text,$buttons);
-
-
-    }
-
-
-
-    private function prepareFinish()
-    {
-        // получаем значение контактов
-        $contact = $this->pdo->query("SELECT * FROM mailing ORDER BY id DESC LIMIT 1");
-        // парсим в массив
-        $item = $contact->fetch();
-        // возвращаем результат
-		if(!isset($item['image'])){
-		$item['image'] =0;
-		$item['image_tlg'] =0;
-		}
-	         if(!isset($item['caption'])){
-		$item['caption'] =0;
-		}
-        return $item;
+	if(srlen($text)> 200){
+	  $this->sendMessage($this->admin, "Слишком длинный текст");
+ 	} else {
+	
+	}
     }
 
 
